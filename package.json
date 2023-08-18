@@ -12,9 +12,9 @@
         }
     },
     "keywords": [
+        "custom-metrics",
         "metrics",
         "serverless",
-        "log",
         "observability",
         "typescript",
         "aws",
@@ -26,12 +26,12 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/sensedeep/metrics.git"
+        "url": "https://github.com/sensedeep/custom-metrics.git"
     },
     "bugs": {
-        "url": "http://github.com/sensedeep/metrics/issues"
+        "url": "http://github.com/sensedeep/custom-metrics/issues"
     },
-    "homepage": "https://github.com/sensedeep/metrics",
+    "homepage": "https://github.com/sensedeep/custom-metrics",
     "license": "MIT",
     "scripts": {
         "build": "rm -fr dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && ./fixup",
