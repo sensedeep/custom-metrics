@@ -1,5 +1,5 @@
 import { Schema, Version } from './schema';
-import { Entity, Table } from '../onetable/dist/cjs/index.js';
+import { Entity, Table } from 'dynamodb-onetable';
 type SpanDef = {
     period: number;
     samples: number;

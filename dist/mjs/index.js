@@ -1,6 +1,6 @@
 import process from 'process';
 import { Schema, Version } from './schema';
-import { Table } from '../onetable/dist/cjs/index.js';
+import { Table } from 'dynamodb-onetable';
 const Assert = true;
 const Buffering = true;
 const DefaultResolution = 0;

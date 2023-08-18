@@ -8,7 +8,7 @@ const process_1 = __importDefault(require("process"));
 const schema_1 = require("./schema");
 Object.defineProperty(exports, "Schema", { enumerable: true, get: function () { return schema_1.Schema; } });
 Object.defineProperty(exports, "Version", { enumerable: true, get: function () { return schema_1.Version; } });
-const index_js_1 = require("../onetable/dist/cjs/index.js");
+const dynamodb_onetable_1 = require("dynamodb-onetable");
 const Assert = true;
 const Buffering = true;
 const DefaultResolution = 0;
@@ -95,7 +95,7 @@ class CustomMetrics {
             schema.indexes.primary.hash = options.primaryKey || 'pk';
             schema.indexes.primary.sort = options.sortKey || 'sk';
             schema.params.typeField = options.typeField || '_type';
-            this.db = new index_js_1.Table({
+            this.db = new dynamodb_onetable_1.Table({
                 client: options.client,
                 hidden: false,
                 name: options.tableName,
