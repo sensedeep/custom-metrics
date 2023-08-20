@@ -21,3 +21,6 @@ cov:
 
 pubcov: cov
 	coveralls < coverage/lcov.info
+
+report:
+	open coverage/lcov-report/index.html

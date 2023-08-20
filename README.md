@@ -46,7 +46,6 @@ CustomMetrics achieves these savings by supporting only "latest" period metrics.
 
 CustomMetrics stores each metric in a single, compressed DynamoDB item. 
 
-
 ## Quick Tour
 
 Install the library using npm or yarn.
@@ -72,7 +71,7 @@ const metrics = new CustomMetrics({
 })
 ```
 
-Metrics emitted by an instance will be scoped and "owned" by the `owner` property you specify. This is typically a service, application or account name. CustomMetric instances with different owners are isolated from each other and their metrics will not interfere with each other.
+Metrics emitted by an instance will be scoped and "owned" by the `owner` property you specify. This is typically a service, application or account name. CustomMetric instances with different owners are isolated from each other and their metrics will not interfere with each other. If omitted, the owner defaults to 'account'.
 
 Metrics are stored in the DynamoDB database referenced by the **dynamodDbClient** instance which is an AWS V3 DynamoDB Document Client instance.
 
