@@ -55,8 +55,6 @@ test('Test basic emit', async () => {
     expect(r.points[0].value).toBe(10)
     expect(r.points[0].count).toBe(1)
     expect(r.points[0].timestamp).toBe(timestamp)
-    // dump('RESULTS', list)
-
 })
 
 test('Test emit with dimensions', async () => {
@@ -91,6 +89,28 @@ test('Test emit with dimensions', async () => {
     expect(r.dimensions).toBeDefined()
     expect(r.dimensions.Rocket).toBe('Starship')
     expect(r.points.length).toBe(0)
+})
+
+test('Emit API', async () => {
+    let metrics = new CustomMetrics({onetable: table})
+    expect(async () => {
+        await metrics.emit('myspace/test', 'Launches', null as any)
+    }).rejects.toThrow()
+    expect(async () => {
+        await metrics.emit('myspace/test', 'Launches', undefined as any)
+    }).rejects.toThrow()
+    expect(async () => {
+        await metrics.emit('myspace/test', 'Launches', 'invalid' as any)
+    }).rejects.toThrow()
+    expect(async () => {
+        await metrics.emit(null as any, 'Launches', 10)
+    }).rejects.toThrow()
+    expect(async () => {
+        await metrics.emit('namespace', null as any, 10)
+    }).rejects.toThrow()
+
+    //  Emit with ttl
+    await metrics.emit('myspace/test', 'ShortLived', 10, [], {ttl: 3600})
 })
 
 test('Destroy Table', async () => {

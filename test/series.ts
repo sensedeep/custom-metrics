@@ -28,11 +28,13 @@ test('Test', async () => {
     let span = DefaultSpans[2]
     let interval = span.period / span.samples
 
+    let metric
     for (let i = 0; i < 4; i++) {
-        await metrics.emit('myspace/test', 'FirstMetric', 10, [], {timestamp})
+        metric = await metrics.emit('myspace/test', 'FirstMetric', 10, [], {timestamp})
         timestamp += interval * 1000
     }
     timestamp = timestamp - (interval * 1000) + 1000
+    
     let r = await metrics.query('myspace/test', 'FirstMetric', {}, 86400, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.metric).toBe('FirstMetric')

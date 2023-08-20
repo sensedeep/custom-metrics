@@ -45,7 +45,7 @@ test('Constructor with OneTable', async () => {
 })
 
 test('Constructor with client', async () => {
-    let metrics = new CustomMetrics({client: Client, tableName: TableName, owner: 'service', log: false})
+    let metrics = new CustomMetrics({client: Client, tableName: TableName})
     expect(metrics).toBeDefined()
     expect(metrics instanceof CustomMetrics).toBe(true)
     expect(typeof metrics.emit == 'function').toBe(true)
@@ -53,7 +53,7 @@ test('Constructor with client', async () => {
 
 test('Constructor with custom spans', async () => {
     const Spans = [{period: 86400, samples: 24}]
-    let metrics = new CustomMetrics({onetable: table, owner: 'service', log: false, spans: Spans})
+    let metrics = new CustomMetrics({onetable: table, spans: Spans})
 
     let timestamp = new Date(2000, 0, 1).getTime()
     let metric
@@ -70,6 +70,79 @@ test('Constructor with custom spans', async () => {
     expect(r.points.length).toBe(24)
     expect(r.points[0].value).toBe(10)
     expect(r.points[0].count).toBe(1)
+})
+
+test('Constructor with options', async () => {
+    //  Log true
+    let metrics = new CustomMetrics({onetable: table, log: true})
+    expect(metrics).toBeDefined()
+
+    //  Verbose log
+    metrics = new CustomMetrics({onetable: table, log: 'verbose'})
+    expect(metrics).toBeDefined()
+
+    //  Custom log
+    metrics = new CustomMetrics({onetable: table, log: {
+        info: (message: string, context: {}) => null,
+        error: (message: string, context: {}) => null,
+    }})
+    expect(metrics).toBeDefined()
+
+    //  Pre-defined onetable models
+    table.addModel('Metric', Schema.models.Metric)
+    metrics = new CustomMetrics({onetable: table})
+    expect(metrics).toBeDefined()
+
+    //  Verbose log
+    metrics = new CustomMetrics({onetable: table, log: 'verbose'})
+    expect(metrics).toBeDefined()
+
+    //  DynamoDB prefix
+    metrics = new CustomMetrics({onetable: table, prefix: 'met'})
+    expect(metrics).toBeDefined()
+
+    //  TTL
+    metrics = new CustomMetrics({onetable: table, ttl: 86400})
+    expect(metrics).toBeDefined()
+
+
+    expect(() => {
+        //  empty spans
+        new CustomMetrics({onetable: table, spans: []})
+    }).toThrow()
+    expect(() => {
+        //  Invalid pResolution
+        new CustomMetrics({onetable: table, pResolution: -1})
+    }).toThrow()
+    expect(() => {
+        //  Invalid buffer
+        new CustomMetrics({onetable: table, buffer: true as any})
+    }).toThrow()
+    expect(() => {
+        //  Bad TTL
+        new CustomMetrics({onetable: table, ttl: true as any})
+    }).toThrow()
+    expect(() => {
+        //  Bad Source
+        new CustomMetrics({onetable: table, source: true as any})
+    }).toThrow()
+    expect(() => {
+        //  Missing database
+        new CustomMetrics({})
+    }).toThrow()
+    expect(() => {
+        //  Missing table name
+        new CustomMetrics({client: Client})
+    }).toThrow()
+    expect(() => {
+        //  Missing options
+        new CustomMetrics()
+    }).toThrow()
+})
+
+test('Constructor coverage', async () => {
+    new CustomMetrics({onetable: table, buffer: {sum: 100}})
+    new CustomMetrics({onetable: table, source: 'internal'})
 })
 
 test('Destroy Table', async () => {

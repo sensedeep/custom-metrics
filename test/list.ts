@@ -71,6 +71,13 @@ test('Test', async () => {
     expect(JSON.stringify(list.dimensions![1])).toBe('{"Rocket":"SaturnV"}')
 })
 
+test('List API', async () => {
+    //  With logging to pass through to OneTable find
+    let metrics = new CustomMetrics({onetable: table})
+    let list = await metrics.getMetricList('myspace/test', 'Launches', {log: false})
+    expect(list).toBeDefined()
+})
+
 test('Destroy Table', async () => {
     await table.deleteTable('DeleteTableForever')
     expect(await table.exists()).toBe(false)

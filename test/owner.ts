@@ -22,6 +22,11 @@ test('Create Table', async () => {
     }
 })
 
+test('Constructor no owner', async () => {
+    let metrics = new CustomMetrics({onetable: table})
+    expect(metrics).toBeDefined()
+})
+
 test('Constructor with different owners', async () => {
     let m1 = new CustomMetrics({onetable: table, owner: 'app1', log: true})
     let m2 = new CustomMetrics({onetable: table, owner: 'service2', log: true})

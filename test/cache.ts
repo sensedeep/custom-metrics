@@ -41,12 +41,15 @@ test('Alloc', async () => {
     expect(inst).toEqual(metrics)
     cache = CustomMetrics.getCache()
     expect(Object.keys(cache).length).toBe(1)
+    CustomMetrics.flushAll()
 
     CustomMetrics.freeInstance(tags)
     inst = CustomMetrics.getInstance(tags)
     expect(inst).toBeUndefined()
     expect(cache).toBeDefined()
     expect(Object.keys(cache).length).toBe(0)
+
+    CustomMetrics.freeInstanceByKey('unknown')
 })
 
 test('Destroy Table', async () => {
