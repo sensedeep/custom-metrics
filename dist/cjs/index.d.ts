@@ -1,4 +1,4 @@
-import { Schema, Version } from './schema';
+import { Schema } from './schema';
 import { Entity, Table } from 'dynamodb-onetable';
 type SpanDef = {
     period: number;
@@ -60,7 +60,6 @@ export type MetricEmitOptions = {
     ttl?: number;
 };
 export type MetricListOptions = {
-    fields?: string[];
     log?: boolean;
     limit?: number;
     next?: object;
@@ -92,8 +91,9 @@ export declare class CustomMetrics {
     private ttl;
     constructor(options?: MetricOptions);
     emit(namespace: string, metricName: string, value: number, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;
-    private emitDimensionMetric;
-    bufferMetric(namespace: string, metricName: string, value: number, dimensionsList: MetricDimensionsList, options: MetricBufferOptions): Point;
+    private emitDimensions;
+    private emitDimensionedMetric;
+    bufferMetric(namespace: string, metricName: string, value: number, dimensionsList: MetricDimensionsList, options: MetricEmitOptions): Promise<Metric>;
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
     flush(): Promise<void>;
@@ -115,5 +115,8 @@ export declare class CustomMetrics {
     static getCache(): InstanceMap;
     private getTimestamp;
     private assert;
+    private info;
+    private error;
+    private nop;
 }
-export { Schema, Version };
+export {};

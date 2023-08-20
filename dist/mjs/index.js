@@ -34,25 +34,16 @@ export class CustomMetrics {
     ttl;
     constructor(options = {}) {
         if (options.log == true) {
-            this.log = {
-                info: (message, context) => null,
-                error: (message, context) => console.log('ERROR: ' + message, context),
-            };
+            this.log = { info: this.nop, error: this.error };
         }
         else if (options.log == 'verbose') {
-            this.log.info = (message, context) => console.log('INFO: ' + message, context);
+            this.log = { info: this.info, error: this.error };
         }
         else if (options.log) {
             this.log = options.log;
         }
         else {
-            this.log = {
-                info: (message, context) => null,
-                error: (message, context) => null,
-            };
-        }
-        if (!options.owner) {
-            throw new Error('Missing required "owner" in options');
+            this.log = { info: this.nop, error: this.nop };
         }
         if (options.ttl && typeof options.ttl != 'number') {
             throw new Error('Bad type for "ttl" option');
@@ -134,29 +125,20 @@ export class CustomMetrics {
         let point;
         let buffer = options.buffer || this.buffer;
         if (buffer && Buffering) {
-            point = this.bufferMetric(namespace, metricName, value, dimensionsList, buffer);
-            if (point.timestamp === 0) {
-                let result = {
-                    spans: [{ points: [point] }],
-                    metric: metricName,
-                    namespace: namespace,
-                    owner: options.owner || this.owner,
-                    version: Version,
-                };
-                return result;
-            }
+            return await this.bufferMetric(namespace, metricName, value, dimensionsList, options);
         }
-        else {
-            point = { count: 1, sum: value };
-        }
+        point = { count: 1, sum: value };
+        return await this.emitDimensions(namespace, metricName, point, dimensionsList, options);
+    }
+    async emitDimensions(namespace, metricName, point, dimensionsList, options) {
         let result;
         for (let dimensions of dimensionsList) {
             let dimString = this.makeDimensionString(dimensions);
-            result = await this.emitDimensionMetric(namespace, metricName, point, dimString, options);
+            result = await this.emitDimensionedMetric(namespace, metricName, point, dimString, options);
         }
         return result;
     }
-    async emitDimensionMetric(namespace, metricName, point, dimensions, options = {}) {
+    async emitDimensionedMetric(namespace, metricName, point, dimensions, options = {}) {
         let ttl = options.ttl != undefined ? options.ttl : this.ttl;
         let retries = MaxRetries;
         let metric;
@@ -197,35 +179,40 @@ export class CustomMetrics {
         } while (retries-- > 0);
         return metric;
     }
-    bufferMetric(namespace, metricName, value, dimensionsList, options) {
+    async bufferMetric(namespace, metricName, value, dimensionsList, options) {
+        let buffer = options.buffer || this.buffer;
         let interval = this.spans[0].period / this.spans[0].samples;
         let key = `${namespace}|${metricName}|${JSON.stringify(dimensionsList)}`;
         let elt = (this.buffers[key] = this.buffers[key] || {
             count: 0,
             sum: 0,
-            timestamp: this.timestamp + (options.elapsed || interval),
+            timestamp: this.timestamp + (buffer.elapsed || interval),
             namespace: namespace,
             metric: metricName,
             dimensions: dimensionsList,
         });
-        elt.sum += value;
-        elt.count++;
-        if (options.force ||
-            (options.sum && elt.sum >= options.sum) ||
-            (options.count && elt.count >= options.count) ||
+        if (buffer.force ||
+            (buffer.sum && elt.sum >= buffer.sum) ||
+            (buffer.count && elt.count >= buffer.count) ||
             this.timestamp >= elt.timestamp) {
-            delete this.buffers[key];
-            this.log.info(`Emit buffered metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${elt.count} remaining ${elt.timestamp - this.timestamp}`, { elt, buffers: this.buffers });
-            return { count: elt.count, sum: elt.sum, timestamp: elt.timestamp };
+            this.log.info(`Emit buffered metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${elt.count} remaining ${elt.timestamp - this.timestamp}`);
+            let point = { count: elt.count, sum: elt.sum, timestamp: elt.timestamp };
+            await this.emitDimensions(namespace, metricName, point, dimensionsList, options);
         }
-        CustomMetrics.saveInstance({ key }, this);
+        elt.count++;
+        elt.sum += value;
         this.log.info(`Buffer metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${elt.count}, remaining ${elt.timestamp - this.timestamp}`);
-        return { count: elt.count, sum: elt.sum, timestamp: 0 };
+        CustomMetrics.saveInstance({ key }, this);
+        return {
+            spans: [{ points: [{ count: elt.count, sum: elt.sum }] }],
+            metric: metricName,
+            namespace: namespace,
+            owner: options.owner || this.owner,
+            version: Version,
+        };
     }
     static async terminate() {
-        let start = Date.now();
         await CustomMetrics.flushAll();
-        console.log(`Lambda terminating, metric flush took ${(Date.now() - start) / 1000} ms`);
     }
     static async flushAll() {
         for (let [key, instance] of Object.entries(Instances)) {
@@ -238,7 +225,7 @@ export class CustomMetrics {
         for (let elt of Object.values(this.buffers)) {
             let point = { count: elt.count, sum: elt.sum };
             for (let dimensions of elt.dimensions) {
-                await this.emitDimensionMetric(elt.namespace, elt.metric, point, this.makeDimensionString(dimensions));
+                await this.emitDimensionedMetric(elt.namespace, elt.metric, point, this.makeDimensionString(dimensions));
             }
         }
         this.buffers = {};
@@ -284,7 +271,7 @@ export class CustomMetrics {
         else {
             result = { dimensions, metric: metricName, namespace, period, points: [], owner };
         }
-        this.log.info(`Metric query ${namespace}, ${metricName}, ${this.makeDimensionString(dimensions)}, ` +
+        this.log.info(`Metric query ${namespace}, ${metricName}, ${this.makeDimensionString(dimensions) || '[]'}, ` +
             `period ${period}, statistic "${statistic}"`, { result });
         return result;
     }
@@ -326,19 +313,17 @@ export class CustomMetrics {
             }
             else if (statistic == 'sum') {
                 value += point.sum;
-                count += point.count;
             }
             else if (statistic == 'count') {
                 value += point.count;
-                count += point.count;
             }
             else if (statistic.match(/^p[0-9]+/)) {
-                pvalues = pvalues.concat(point.pvalues || []);
+                pvalues = pvalues.concat(point.pvalues);
             }
             else {
                 value += point.sum;
-                count += point.count;
             }
+            count += point.count;
         }
         if (statistic.match(/^p[0-9]+/)) {
             let p = parseInt(statistic.slice(1));
@@ -347,7 +332,7 @@ export class CustomMetrics {
             value = pvalues[nth];
         }
         else if (statistic == 'avg') {
-            value /= count || 1;
+            value /= Math.max(count, 1);
         }
         return {
             dimensions: this.makeDimensionObject(metric.dimensions),
@@ -362,9 +347,9 @@ export class CustomMetrics {
         let points = [];
         let interval = span.period / span.samples;
         let timestamp = span.end - span.points.length * interval;
+        let value;
         let i = 0;
         for (let point of span.points) {
-            let value;
             if (point.count > 0) {
                 if (statistic == 'max') {
                     if (point.max != undefined) {
@@ -394,13 +379,13 @@ export class CustomMetrics {
                 }
                 else if (statistic.match(/^p[0-9]+/)) {
                     let p = parseInt(statistic.slice(1));
-                    let pvalues = point.pvalues || [];
+                    let pvalues = point.pvalues;
                     pvalues.sort((a, b) => a - b);
                     let nth = Math.min(Math.round((pvalues.length * p) / 100 + 1), pvalues.length - 1);
                     value = pvalues[nth];
                 }
                 else {
-                    value = point.sum / (point.count || 1);
+                    value = point.sum / point.count;
                 }
             }
             timestamp += interval;
@@ -419,10 +404,7 @@ export class CustomMetrics {
     }
     makeDimensionString(dimensions) {
         let result = [];
-        for (let [name, value] of Object.entries(dimensions || {})) {
-            if (Array.isArray(value)) {
-                this.log.error(`Dimension is an array`, { value, dimensions });
-            }
+        for (let [name, value] of Object.entries(dimensions)) {
             result.push(`${name}=${value}`);
         }
         return result.join(',');
@@ -445,35 +427,37 @@ export class CustomMetrics {
         let interval = span.period / span.samples;
         let points = span.points;
         let start = span.end - points.length * interval;
-        let period = span.period < queryPeriod ? queryPeriod : 0;
+        let aggregate = !queryPeriod || span.period < queryPeriod ? true : false;
+        while (points.length > span.samples) {
+            points.shift();
+        }
         if (points.length) {
             if (timestamp < start) {
-                this.log.error('Bad span', { metric, point, timestamp, start, span });
+                this.log.error('Bad metric span', { metric, point, timestamp, start, span });
                 return;
             }
             let shift = 0;
-            if (queryPeriod) {
-                if (period) {
-                    shift = points.length;
-                }
+            if (queryPeriod && aggregate) {
+                shift = points.length;
             }
             else if (point.count) {
-                shift = (timestamp - start) / interval - span.samples + 1;
+                shift = Math.floor((timestamp - start) / interval) - span.samples + 1;
+            }
+            else if (queryPeriod) {
+                shift = Math.floor((timestamp - start) / interval) - span.samples;
             }
             shift = Math.max(0, Math.min(shift, points.length));
             this.assert(0 <= shift && shift <= points.length);
             while (shift-- > 0) {
                 let p = points.shift();
-                if (p.count && si + 1 < metric.spans.length) {
-                    this.addValue(metric, start, p, si + 1, period);
+                if (aggregate && p.count && si + 1 < metric.spans.length) {
+                    this.addValue(metric, start, p, si + 1, queryPeriod);
                 }
                 start += interval;
             }
         }
-        if (period) {
-            if (si + 1 < metric.spans.length) {
-                this.addValue(metric, timestamp, point, si + 1, period);
-            }
+        if (aggregate && queryPeriod && si + 1 < metric.spans.length) {
+            this.addValue(metric, timestamp, point, si + 1, queryPeriod);
         }
         else if (point.count) {
             if (points.length == 0) {
@@ -519,7 +503,7 @@ export class CustomMetrics {
         if (this.pResolution) {
             point.pvalues = point.pvalues || [];
             if (add.pvalues) {
-                point.pvalues.push(...(add.pvalues || [add.sum / add.count]));
+                point.pvalues.push(...add.pvalues);
             }
             else {
                 point.pvalues.push(add.sum / add.count);
@@ -552,17 +536,8 @@ export class CustomMetrics {
             stats,
             where,
         });
-        let size = JSON.stringify(result).length;
-        this.log.info(`Emit metric: ${metric.namespace}/${metric.metric}/${metric.dimensions} = ${point.sum}, msize ${size}`, {
-            metric,
-            point,
-            stats,
-        });
     }
-    async getMetricList(namespace = undefined, metric = undefined, options = { fields: ['pk', 'sk'], limit: MetricListLimit }) {
-        if (!options.fields) {
-            options.fields = ['pk', 'sk'];
-        }
+    async getMetricList(namespace = undefined, metric = undefined, options = { limit: MetricListLimit }) {
         let map = {};
         let next;
         let owner = options.owner || this.owner;
@@ -658,5 +633,11 @@ export class CustomMetrics {
             this.log.error(`Assertion failed ${msg.stack}`);
         }
     }
+    info(message, context = {}) {
+        console.log('INFO: ' + message, context);
+    }
+    error(message, context = {}) {
+        console.log('ERROR: ' + message, context);
+    }
+    nop() { }
 }
-export { Schema, Version };
