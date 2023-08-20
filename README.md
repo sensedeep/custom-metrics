@@ -50,7 +50,7 @@ CustomMetrics stores each metric in a single, compressed DynamoDB item.
 
 Install the library using npm or yarn.
 
-    npm i CustomMetrics
+    npm i custom-metrics
 
 Import the CustomMetrics library. If you are not using ES modules or TypeScript, use `require` to import the library.
 
