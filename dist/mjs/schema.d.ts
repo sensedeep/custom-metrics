@@ -120,7 +120,6 @@ declare const Schema: {
         };
     };
     params: {
-        partial: boolean;
         isoDates: boolean;
         nulls: boolean;
         timestamps: boolean;

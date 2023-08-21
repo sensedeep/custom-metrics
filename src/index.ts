@@ -5,6 +5,7 @@
 import process from 'process'
 import {Schema, Version} from './schema'
 import {Entity, Model, Table} from 'dynamodb-onetable'
+// import {Entity, Model, Table} from '../onetable/dist/cjs/index.js'
 
 const Assert = true
 const Buffering = true
@@ -211,7 +212,6 @@ export class CustomMetrics {
             schema.params.typeField = options.typeField || '_type'
             this.db = new Table({
                 client: options.client,
-                hidden: false,
                 name: options.tableName,
                 partial: true,
                 schema,
@@ -294,6 +294,7 @@ export class CustomMetrics {
             let owner = options.owner || this.owner
             metric = await this.MetricModel.get(
                 {owner, namespace, metric: metricName, dimensions: dimensions, version: Version},
+                // Need hidden to get pk/sk as namespace, metric are encoded 
                 {hidden: true}
             )
             if (!metric) {
@@ -454,7 +455,7 @@ export class CustomMetrics {
          */
         let span = metric.spans.find((s) => period <= s.period)
         if (!span) {
-            span = metric.spans.at(-1)
+            span = metric.spans[metric.spans.length - 1]
             period = span.period
         }
 
@@ -489,7 +490,7 @@ export class CustomMetrics {
 
         //  Remove this trace soon
         this.log.info(
-            `Metric query ${namespace}, ${metricName}, ${this.makeDimensionString(dimensions) || '[]'}, ` +
+            `Metric query ${namespace}, ${metricName}, ${dimString || '[]'}, ` +
                 `period ${period}, statistic "${statistic}"`,
             {result}
         )
@@ -666,7 +667,7 @@ export class CustomMetrics {
         this.assert(0 <= si && si < metric.spans.length)
         let span = metric.spans[si]
         let interval = span.period / span.samples
-        let points = span.points
+        let points = span.points || []
         let start = span.end - points.length * interval
 
         //  Aggregate points to higher spans if not querying or if querying and not yet at desired period
@@ -746,7 +747,7 @@ export class CustomMetrics {
     private setPoint(span: Span, index: number, add: Point) {
         let points = span.points
         this.assert(0 <= index && index < points.length)
-        let point = points.at(index)!
+        let point = points[index]!
         /* istanbul ignore next */
         if (!point) {
             this.log.error(`Metric null point`, {span, index, add})
@@ -809,12 +810,11 @@ export class CustomMetrics {
             Use a sequence number to detect simultaneous updated. If collision, will throw 
             a ConditionalCheckFailedException and emit() will then retry.
         */
-        let stats = {}
-        let result = await this.db.create('Metric', metric, {
+        await this.db.create('Metric', metric, {
             exists: null,
             timestamps: false,
+            partial: true,
             return: false,
-            stats,
             where,
         })
         /* KEEP
@@ -839,10 +839,6 @@ export class CustomMetrics {
         metric: string = undefined,
         options: MetricListOptions = {/* fields: ['pk', 'sk'], */ limit: MetricListLimit}
     ): Promise<MetricList> {
-        /*
-        if (!options.fields) {
-            options.fields = ['pk', 'sk']
-        } */
         let map = {} as any
         let next: object | undefined
         let owner = options.owner || this.owner

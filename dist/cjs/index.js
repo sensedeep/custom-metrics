@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CustomMetrics = exports.DefaultSpans = void 0;
 const process_1 = __importDefault(require("process"));
 const schema_1 = require("./schema");
-const dynamodb_onetable_1 = require("dynamodb-onetable");
+const index_js_1 = require("../onetable/dist/cjs/index.js");
 const Assert = true;
 const Buffering = true;
 const DefaultResolution = 0;
@@ -84,11 +84,10 @@ class CustomMetrics {
             schema.indexes.primary.hash = options.primaryKey || 'pk';
             schema.indexes.primary.sort = options.sortKey || 'sk';
             schema.params.typeField = options.typeField || '_type';
-            this.db = new dynamodb_onetable_1.Table({
+            this.db = new index_js_1.Table({
                 client: options.client,
-                hidden: false,
                 name: options.tableName,
-                partial: true,
+                partial: false,
                 schema,
             });
             this.MetricModel = this.db.getModel('Metric');
@@ -243,7 +242,7 @@ class CustomMetrics {
         }
         let span = metric.spans.find((s) => period <= s.period);
         if (!span) {
-            span = metric.spans.at(-1);
+            span = metric.spans[metric.spans.length - 1];
             period = span.period;
         }
         this.log.info(`Query ${namespace} ${metricName} ${dimString} ${period} ${statistic}`, {
@@ -266,7 +265,7 @@ class CustomMetrics {
         else {
             result = { dimensions, metric: metricName, namespace, period, points: [], owner };
         }
-        this.log.info(`Metric query ${namespace}, ${metricName}, ${this.makeDimensionString(dimensions) || '[]'}, ` +
+        this.log.info(`Metric query ${namespace}, ${metricName}, ${dimString || '[]'}, ` +
             `period ${period}, statistic "${statistic}"`, { result });
         return result;
     }
@@ -420,7 +419,7 @@ class CustomMetrics {
         this.assert(0 <= si && si < metric.spans.length);
         let span = metric.spans[si];
         let interval = span.period / span.samples;
-        let points = span.points;
+        let points = span.points || [];
         let start = span.end - points.length * interval;
         let aggregate = !queryPeriod || span.period < queryPeriod ? true : false;
         while (points.length > span.samples) {
@@ -475,7 +474,7 @@ class CustomMetrics {
     setPoint(span, index, add) {
         let points = span.points;
         this.assert(0 <= index && index < points.length);
-        let point = points.at(index);
+        let point = points[index];
         if (!point) {
             this.log.error(`Metric null point`, { span, index, add });
             return;
@@ -523,12 +522,11 @@ class CustomMetrics {
             }
             where = `\${seq} = {${seq}}`;
         }
-        let stats = {};
-        let result = await this.db.create('Metric', metric, {
+        await this.db.create('Metric', metric, {
             exists: null,
             timestamps: false,
+            partial: false,
             return: false,
-            stats,
             where,
         });
     }

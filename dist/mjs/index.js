@@ -1,6 +1,6 @@
 import process from 'process';
 import { Schema, Version } from './schema';
-import { Table } from 'dynamodb-onetable';
+import { Table } from '../onetable/dist/cjs/index.js';
 const Assert = true;
 const Buffering = true;
 const DefaultResolution = 0;
@@ -91,9 +91,8 @@ export class CustomMetrics {
             schema.params.typeField = options.typeField || '_type';
             this.db = new Table({
                 client: options.client,
-                hidden: false,
                 name: options.tableName,
-                partial: true,
+                partial: false,
                 schema,
             });
             this.MetricModel = this.db.getModel('Metric');
@@ -248,7 +247,7 @@ export class CustomMetrics {
         }
         let span = metric.spans.find((s) => period <= s.period);
         if (!span) {
-            span = metric.spans.at(-1);
+            span = metric.spans[metric.spans.length - 1];
             period = span.period;
         }
         this.log.info(`Query ${namespace} ${metricName} ${dimString} ${period} ${statistic}`, {
@@ -271,7 +270,7 @@ export class CustomMetrics {
         else {
             result = { dimensions, metric: metricName, namespace, period, points: [], owner };
         }
-        this.log.info(`Metric query ${namespace}, ${metricName}, ${this.makeDimensionString(dimensions) || '[]'}, ` +
+        this.log.info(`Metric query ${namespace}, ${metricName}, ${dimString || '[]'}, ` +
             `period ${period}, statistic "${statistic}"`, { result });
         return result;
     }
@@ -425,7 +424,7 @@ export class CustomMetrics {
         this.assert(0 <= si && si < metric.spans.length);
         let span = metric.spans[si];
         let interval = span.period / span.samples;
-        let points = span.points;
+        let points = span.points || [];
         let start = span.end - points.length * interval;
         let aggregate = !queryPeriod || span.period < queryPeriod ? true : false;
         while (points.length > span.samples) {
@@ -480,7 +479,7 @@ export class CustomMetrics {
     setPoint(span, index, add) {
         let points = span.points;
         this.assert(0 <= index && index < points.length);
-        let point = points.at(index);
+        let point = points[index];
         if (!point) {
             this.log.error(`Metric null point`, { span, index, add });
             return;
@@ -528,12 +527,11 @@ export class CustomMetrics {
             }
             where = `\${seq} = {${seq}}`;
         }
-        let stats = {};
-        let result = await this.db.create('Metric', metric, {
+        await this.db.create('Metric', metric, {
             exists: null,
             timestamps: false,
+            partial: false,
             return: false,
-            stats,
             where,
         });
     }

@@ -58,8 +58,7 @@ const Schema = {
         }
     } as const,
     params: {
-        partial: true,
-        isoDates: true,
+        isoDates: false,
         nulls: false,
         timestamps: false,
         typeField: '_type',

@@ -4,7 +4,7 @@
 const waitPort = require('wait-port')
 import DynamoDbLocal from 'dynamo-db-local'
 
-const PORT = parseInt(process.env.PORT || '4567')
+const PORT = parseInt(process.env.PORT || '4765')
 
 module.exports = async () => {
     let dynamodb = DynamoDbLocal.spawn({port: PORT})

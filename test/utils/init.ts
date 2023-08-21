@@ -1,10 +1,12 @@
 import {DynamoDBClient} from '@aws-sdk/client-dynamodb'
-import {OneSchema, Table} from 'dynamodb-onetable'
 import {CustomMetrics, DefaultSpans, Metric, MetricQueryPoint, MetricQueryResult} from '../../src/index'
 import {Schema} from '../../src/schema'
 import SenseLogs from 'senselogs'
 
-const PORT = parseInt(process.env.DYNAMODB_PORT || '4567')
+import {OneSchema, Table} from 'dynamodb-onetable'
+// import {OneSchema, Table} from '../../onetable/dist/cjs/index.js'
+
+const PORT = parseInt(process.env.DYNAMODB_PORT || '4765')
 const log = new SenseLogs({destination: 'stdout', format: 'human'})
 
 const Client = new DynamoDBClient({
