@@ -40,7 +40,9 @@ CustomMetrics achieves these savings by supporting only "latest" period metrics.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
 -   Clean, readable small code base (<1K lines).
+<!--
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
+-->
 
 ## Database
 
@@ -130,7 +132,7 @@ This will return data like this:
 {
     "namespace": "Acme/Metrics",
     "metric": "launches",
-    "dimensions": {rocket: "saturnV"},
+    "dimensions": {"rocket": "saturnV"},
     "spans": [{
         "end": 946648800,
         "period": 300,
@@ -207,10 +209,6 @@ Here are the results of benchmarks against standard CloudWatch Metrics.
 
 CustomMetrics is 1000x times cheaper than CloudWatch Metrics:
 
-| Logger             |   Time   | Code Size  |
-| ------------------ | :------: | ---------- |
-| CustomMetrics       |  477 ms  | 450 lines  |
-| CloudWatch Metrics | 3,269 ms | 1281 lines |
 -->
 
 ## Limitations
@@ -480,7 +478,10 @@ All feedback, discussion, contributions and bug reports are very welcome.
 
 ### SenseDeep
 
-A great way to view CustomMetrics is with [SenseDeep](https://www.sensedeep.com/). You can create dashboards with graphs, gauges and numerical widgets to display, monitor and alert on your metrics.
+Very soon, we'll be updating SenseDeep to support graphing and viewing CustomMetrics. We'll also support the ability to create alarms and receive notifications based on CustomMetric data.
+
+<!-- [SenseDeep](https://www.sensedeep.com/). You can create dashboards with graphs, gauges and numerical widgets to display, monitor and alert on your metrics.
+-->
 
 ### Contact
 
