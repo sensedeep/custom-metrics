@@ -1,4 +1,3 @@
-
 # CustomMetrics
 
 ![CustomMetrics](https://www.sensedeep.com/images/metrics.png)
@@ -27,22 +26,20 @@ CustomMetrics achieves these savings by supporting only "latest" period metrics.
 ## CustomMetrics Features
 
 -   Simple one line API to emit metrics from any NodeJS TypeScript or JavaScript app.
--   Similar metric model to AWS supporting namespaces, metrics, dimensions, statistics and intervals.
+-   Similar metric model to supporting namespaces, metrics, dimensions, statistics and intervals.
 -   Computes statistics for: average, min, max, count and sum.
 -   Computes P value statistics with configurable P value resolution.
 -   Supports a default metric intervals of: last 5 mins, hour, day, week, month and year.
 -   Configurable custom intervals for higher or different metric intervals.
--   Fast and flexible query API to fetch by namespace, metric and dimensions.
--   Query API can return data points or aggregate metric as a single statistic.
+-   Fast and flexible metric query API.
+-   Query API can return data points or aggregate metric data to a single statistic.
 -   Scalable to support many simultaneous clients emitting metrics.
--   Stores data in any existing DynamoDB table and can co-exist with existing app data.
+-   Stores data in any existing DynamoDB table and coexists with existing app data.
 -   Supports multiple services, apps, namespaces and metrics in a single DynamoDB table.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
--   Clean, readable small code base (<1K lines).
-<!--
+-   Clean, readable small code base (~1K lines).
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
--->
 
 ## Database
 
@@ -63,37 +60,48 @@ import {CustomMetrics} from 'CustomMetrics'
 Next create and configure the CustomMetrics instance. 
 
 ```javascript
-// Create OneTable instance for your DynamoDB table
 const metrics = new CustomMetrics({
-    client: dynamoDbClient,
-    owner: 'my-service',
-    tableName: 'MyTable',
+    table: 'MyTable',
+    region: 'us-east-1',
     primaryKey: 'pk',
     sortKey: 'sk',
 })
 ```
 
-Metrics emitted by an instance will be scoped and "owned" by the `owner` property you specify. This is typically a service, application or account name. CustomMetric instances with different owners are isolated from each other and their metrics will not interfere with each other. If omitted, the owner defaults to 'account'.
+Metrics are stored in the DynamoDB database referenced by the **table** name in the desired region. This table can be your existing application DynamoDB table and metrics can safely coexist with your app data.
 
-Metrics are stored in the DynamoDB database referenced by the **dynamodDbClient** instance which is an AWS V3 DynamoDB Document Client instance.
+The **primaryKey** and **sortKey** are the primary and sort keys for the main table index. These default to 'pk' and 'sk' respectively. CustomMetrics does not support tables without a sort key.
+
+If you have an existing AWS SDK V3 DynamoDB client instance, you can use that with the CustomMetrics constructor. This will have slightly faster initialization time than simply providing the table name.
 
 ```javascript
 import {DynamoDBClient} from '@aws-sdk/client-dynamodb'
-
 const dynamoDbClient = new DynamoDBClient()
 ```
 
-## OneTable
-
-Alternatively, if you are using [OneTable](https://www.npmjs.com/package/dynamodb-onetable) you can construct CustomMetrics using your OneTable instance. In this case, the table name and primary/sort keys are inferred from the OneTable instance.
-
 ```javascript
-// Create OneTable instance for your DynamoDB table
 const metrics = new CustomMetrics({
-    onetable: OneTableInstance,
-    owner: 'my-service',
+    client: myDynamoDbClient,
+    table: 'MyTable',
+    primaryKey: 'pk',
+    sortKey: 'sk',
 })
 ```
+
+## Metrics Scoping
+
+Metrics emitted by a CustomMetrics instance will be scoped and "owned" by the `owner` property you specify with the constructor. This is typically a service, application or account name. CustomMetric instances with different owners are uniquely stored and are safely isolated from other metrics. If omitted, the owner defaults to **'account'**.
+
+```javascript
+const cartMetrics = new CustomMetrics({
+    owner: 'cart',
+    table: 'MyTable',
+    primaryKey: 'pk',
+    sortKey: 'sk',
+})
+```
+
+## Emitting Metric Data
 
 You can emit metrics via:
 
@@ -103,7 +111,7 @@ await metrics.emit('Acme/Metrics', 'launches', 10)
 
 This will emit the `launches` metric in the `Acme/Metrics` namespace with the value of 10. 
 
-A metric can have dimensions that are unique metrics for a specific instance. For example, we may want to count the number of launches for a specific rocket.
+A metric can have dimensions that are unique metric values for specific instances. For example, we may want to count the number of launches for a specific rocket.
 
 ```javascript
 await metrics.emit('Acme/Metrics', 'launches', 10, [{rocket: 'saturnV'}])
@@ -118,13 +126,17 @@ await metrics.emit('Acme/Metrics', 'launches', 10, [{}, {rocket: 'saturnV'}])
 await metrics.emit('Acme/Metrics', 'launches', 10, [{}, {rocket: 'falcon9'}])
 ```
 
+This will emit a metric that also totals all launches for all rocket types.
+
+## Query Metrics
+
 To query a metric, use the `query` method:
 
 ```javascript
-let results = await metrics.query('Acme/Metrics', 'speed', {rocket: 'saturnV'}, 'mth', 'max')
+let results = await metrics.query('Acme/Metrics', 'speed', {rocket: 'saturnV'}, 86400, 'max')
 ```
 
-This will retrieve the 'speed' metric from the 'Acme/Metrics' namespace for the rocket == 'saturnV' dimension. The data points returned will be the maximum speed measured over the month during each interval. By default, the interval for the month span is 2 days.
+This will retrieve the 'speed' metric from the 'Acme/Metrics' namespace for the rocket == 'saturnV' dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds).
 
 This will return data like this:
 
@@ -161,13 +173,13 @@ let list: MetricList = await metrics.getMetricList()
 
 This will return an array of available namespaces in **list.namespaces**.
 
-To get a list of the metrics available, pass a metric as the first argument.
+To get a list of the metrics available for a given namespace, pass the namespace as the first argument.
 
 ```typescript
 let list: MetricList = await metrics.getMetricList('Acme/Metrics')
 ```
 
-This will return a list of metrics in **list.metrics**.
+This will return a list of metrics in **list.metrics**. Note: this will return the namespaces and metrics for any namespace that begins with the given namespace. Consequently, all namespaces should be unique and not be substrings of another namespace.
 
 To get a list of the dimensions available for a metric, pass in a namespace and metric.
 
@@ -177,109 +189,37 @@ let list: MetricList = await metrics.getMetricList('Acme/Metrics', "speed")
 
 This will return a list of dimensions in **list.dimensions**.
 
-In all calls, the full list of namespaces will be returned regardless.
-
-<!--
-### Viewing Metrics
-
-The [SenseDeep](https://www.sensedeep.com) studio can create graphical dashboards with widgets to display CustomMetrics or standard AWS metrics.
--->
-
-<!--
-## Must cover
-
-* Custom spans
-* Custom P resolution
-* Using P values
-* raw query
-* PK/SK
-* owners
-* ttl
-* implementation (structure of data items)
-    - aging metrics
-    - collisions
-* Calculating max, min, sum, count, ...
-* controlling cost
-
-### Benchmarks
-
-Because CustomMetrics stores metrics in a compressed single DynamoDB item. Emitting a metric, typically uses only a single DynamoDB write and consumes only 1 WCU.
-
-Here are the results of benchmarks against standard CloudWatch Metrics.
-
-CustomMetrics is 1000x times cheaper than CloudWatch Metrics:
-
--->
-
 ## Limitations
 
-While CustomMetrics does have options to buffer and coalesce metric updates, CustomMetrics can impose a meaningful DynamoDB write load if you are updating metrics extremely frequently. See [Buffering](#buffering) below for mitigations.
+If you are updating metrics extremely frequently, CustomMetrics can impose a meaningful DynamoDB write load as each metric update will result in a database write. If you have such high frequency metric updates, consider using
+[Metric Buffering](#buffering) to buffer and coalesce metric updates.
 
 ## Metric Schema
 
 CustomMetrics are stored in a DynamoDB table using the following single-table schema. 
 
-```
-const Schema = {
-    format: 'onetable:1.1.0',
-    version: '0.0.1',
-    indexes: {primary: {hash: 'pk', sort: 'sk'}},
-    models: {
-        Metric: {
-            pk: {type: 'string', value: 'metric#${version}#${owner}'},
-            sk: {type: 'string', value: 'metric#${namespace}#${metric}#${dimensions}'},
-            dimensions: {type: 'string', required: true, encode: ['sk', '#', '3']},
-            expires: {type: 'date', ttl: true},
-            metric: {type: 'string', required: true, encode: ['sk', '#', '2']},
-            namespace: {type: 'string', required: true, encode: ['sk', '#', '1']},
-            owner: {type: 'string', required: true, encode: ['pk', '#', '2']},
-            version: {type: 'number', default: Version, encode: ['pk', '#', '1']},
-            spans: {
-                type: 'array',
-                required: true,
-                default: [],
-                items: {
-                    type: 'object',
-                    default: {},
-                    schema: {
-                        // When the points will be full.
-                        end: {type: 'number', required: true, map: 'se'}, 
-                        period: {type: 'number', required: true, map: 'sp'},
-                        samples: {type: 'number', required: true, map: 'ss'},
-                        points: {
-                            type: 'array',
-                            required: true,
-                            map: 'pt',
-                            default: [],
-                            items: {
-                                type: 'object',
-                                schema: {
-                                    count: {type: 'number', required: true, map: 'c'},
-                                    max: {type: 'number', map: 'x'},
-                                    min: {type: 'number', map: 'm'},
-                                    sum: {type: 'number', required: true, map: 's'},
-                                    //  P-values and timestamp are not stored
-                                    pvalues: {type: 'array', map: 'v'},
-                                    timestamp: {type: 'number', map: 'e', },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-            seq: {type: 'number', default: 0},
-            _source: {type: 'string'}, // When set, bypass DynamoDB steams change detection
-        }
-    } as const,
-    params: {
-        partial: true,
-        isoDates: true,
-        nulls: false,
-        timestamps: false,
-        typeField: '_type',
-    },
-}
-```
+| Field | Attribute | Encoding
+|-|-|
+primaryKey | primaryKey | ${prefix}#${version}#${owner}
+sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions}
+expires | expires | number
+spans | spans | string
+
+The metric spans are encoded as:
+
+| Field | Attribute | Encoding
+|-|-|
+end | se | number
+period | sp | number
+samples | ss | number
+points | pt | array
+
+The span points are encoded as:
+
+| Field | Attribute | Encoding
+|-|-|
+count | c | number
+sum | s | number
 
 ### CustomMetrics Class API
 
@@ -303,7 +243,9 @@ The `options` parameter is of type `object` with the following properties:
 | buffer | `object` | Buffer metric emits. Has properties: {count, elapsed, sum}
 | client | `object` | AWS DynamoDB client instance
 | log | `object` | Logging object with methods for 'info', 'error' and 'warn'
+<!--
 | onetable | `OneTable Table object` | OneTable instance to communicate with DynamoDB
+-->
 | owner | `string` | Unique owner of the metrics. This is used to compute the primary key for the metric data item.
 | primaryKey | `string` | Name of the DynamoDB table primary key attribute. Defaults to 'pk'.
 | sortKey | `string` | Name of the DynamoDB table sort key attribute. Defaults to 'sk'.
@@ -313,12 +255,12 @@ The `options` parameter is of type `object` with the following properties:
 | spans | `array` | Array of span definitions. See below.
 | tableName | `string` | Name of the DynamoDB table to use. Required if using `client` instead of `onetable` options.
 | typeField | `array` | Onetable attribute used to store the model type. Defaults to `_type`.
-| ttl | `number` | Maximum lifespan of the metrics.
+| ttl | `number` | Maximum lifespan of the metrics in seconds.
 
 For example:
 
 ```javascript
-const log = new CustomMetrics({
+const metrics = new CustomMetrics({
     onetable: onetable,
     owner: 'my-service',
     pResolution: 100,
@@ -348,7 +290,7 @@ The span `period` property is the number of seconds in that span. The `samples` 
 Here is an example of a higher resolution set of spans that keep metric values for 1 minute, 5 minutes, 1 hour and 1 day.
 
 ```typescript
-const log = new CustomMetrics({
+const metrics = new CustomMetrics({
     onetable: onetable,
     owner: 'my-service',
     spans: [
@@ -362,7 +304,7 @@ const log = new CustomMetrics({
 
 ## Buffering
 
-If you have a metric that your app emits metrics at very high frequency, you may wish to optimize metrics by aggregating updates. CustomMetrics can aggregate metric updates by buffering emit calls. These are then persisted depending on your configured buffering policy.
+If app emits metrics at very high frequency, you may wish to optimize metrics by aggregating metric updates. CustomMetrics can aggregate metric updates by buffering emit calls. These are then persisted according to your buffering policy.
 
 For example:
 
@@ -372,7 +314,7 @@ await metrics.emit('Acme/Metrics', 'DataSent', 123, [], {
 })
 ```
 
-This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first.  If elapsed is omitted, the default elapsed period is the period of your lowest span.  CustomMetrics will regularly flush metrics as required and will save buffered metrics upon Lambda instance termination. 
+This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first.  If the 'elapsed' property is not provided, the default elapsed period is the interval of your lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required and will save buffered metrics upon Lambda instance termination. 
 
 Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
 
@@ -397,7 +339,6 @@ async emit(namespace: string,
             count: number, 
             elapsed: number,
         }
-        timestamp?: number
     }): Promise<void>
 ```
 
@@ -439,6 +380,11 @@ The `period` argument selects the metric span name to query. For example: 3600 f
 
 The `statistic` can be `avg`, `max`, `min`, `sum`, `count` or a P-value of the form `pNN` where NN is the P-value. For example: p95 would return the P-95 value. To get meaningful P-value statistics you must set the CustomMetrics pResolution parameter to the number of data points to keep for computing P-values. By default this resolution is zero, which means P-values are not computed. To enable, you should set this to at least 100.
 
+The `options` map can modify the query. If `options.accumulate` is true, all points will be aggregated and a single data point will be returned that will represent the desired statistic for the requested period.
+
+If `options.owner` is provided, it overrides the owner give to the CustomMetrics constructor. 
+
+If `options.id` is provided, the ID will be returned in the corresponding result items. This can be used to manager results.
 
 ### getMetricList
 
@@ -478,10 +424,7 @@ All feedback, discussion, contributions and bug reports are very welcome.
 
 ### SenseDeep
 
-Very soon, we'll be updating SenseDeep to support graphing and viewing CustomMetrics. We'll also support the ability to create alarms and receive notifications based on CustomMetric data.
-
-<!-- [SenseDeep](https://www.sensedeep.com/). You can create dashboards with graphs, gauges and numerical widgets to display, monitor and alert on your metrics.
--->
+Very soon, we'll be updating [SenseDeep](https://www.sensedeep.com) to graphing and viewing CustomMetrics. We'll also support the ability to create alarms and receive notifications based on CustomMetric data.
 
 ### Contact
 

@@ -17,6 +17,7 @@ const Schema = {
             namespace: { type: 'string', required: true, encode: ['sk', '#', '1'] },
             owner: { type: 'string', required: true, encode: ['pk', '#', '2'] },
             version: { type: 'number', default: Version, encode: ['pk', '#', '1'] },
+            id: { type: 'string' },
             spans: {
                 type: 'array',
                 required: true,

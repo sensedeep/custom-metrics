@@ -1,12 +1,18 @@
 /*
     CustomMetrics - Simple, configurable, economical metrics for AWS
  */
-
 import process from 'process'
-import {Schema, Version} from './schema'
-import {Entity, Model, Table} from 'dynamodb-onetable'
-// import {Entity, Model, Table} from '../onetable/dist/cjs/index.js'
+import {
+    DynamoDBClient,
+    DynamoDBClientConfig,
+    GetItemCommand,
+    PutItemCommand,
+    PutItemCommandInput,
+    QueryCommand,
+} from '@aws-sdk/client-dynamodb'
+import {marshall, unmarshall} from '@aws-sdk/util-dynamodb'
 
+const Version = 1
 const Assert = true
 const Buffering = true
 const DefaultResolution = 0 // Default number of p-values to store
@@ -31,6 +37,36 @@ export const DefaultSpans: SpanDef[] = [
     {period: 365 * 24 * 60 * 60, samples: 12}, //  1 year, interval: 1 month
 ]
 
+export type Metric = {
+    dimensions: string
+    expires?: number
+    id?: string
+    metric: string
+    namespace: string
+    owner?: string
+    version?: number
+    spans: Span[]
+    seq?: number
+    //  Useful when using streams to filter out items with this attribute
+    _source?: string
+}
+
+export type Point = {
+    count: number
+    max?: number
+    min?: number
+    pvalues?: number[]
+    sum: number
+    //  Never stored
+    timestamp?: number
+}
+
+export type Span = {
+    end: number
+    period: number
+    samples: number
+    points: Point[]
+}
 /*
     Dimensions are an object of dimension:value properties. 
  */
@@ -56,19 +92,22 @@ export type MetricQueryPoint = {
 
 export type MetricQueryResult = {
     dimensions: MetricDimensions
+    id?: string
     metric: string
     namespace: string
     owner: string
     period: number
     points: MetricQueryPoint[]
+    samples: number
 }
 
 // Constructor options
 export type MetricOptions = {
     buffer?: MetricBufferOptions
-    client?: object
+    client?: DynamoDBClient
+    consistent?: boolean
+    creds?: DynamoDBClientConfig
     log?: true | 'verbose' | any
-    onetable?: Table
     owner?: string
     primaryKey?: string
     sortKey?: string
@@ -76,6 +115,8 @@ export type MetricOptions = {
     pResolution?: number
     source?: string
     spans?: SpanDef[]
+    table?: string
+    // DEPRECATE
     tableName?: string
     typeField?: string
     ttl?: number
@@ -96,22 +137,18 @@ export type MetricEmitOptions = {
 }
 
 export type MetricListOptions = {
-    log?: boolean //  Enable OneTable find logging
+    log?: boolean
     limit?: number
-    next?: object
+    // next?: object
     owner?: string
 }
 
 export type MetricQueryOptions = {
     accumulate?: boolean
+    id?: string
     owner?: string
     timestamp?: number
 }
-
-export type Span = Entity<typeof Schema.models.Metric.spans.items.schema>
-export type Point = Entity<typeof Schema.models.Metric.spans.items.schema.points.items.schema>
-
-export type Metric = Entity<typeof Schema.models.Metric>
 
 type BufferElt = {
     count: number
@@ -143,16 +180,21 @@ process.on(
 )
 
 export class CustomMetrics {
+    private consistent = false
     private buffer: MetricBufferOptions | undefined
     private buffers: BufferMap = {}
-    private db: Table
+    private client: DynamoDBClient
     private log: any
-    private MetricModel: Model<Metric>
+    // private MetricModel: Model<Metric>
     private options: MetricOptions
     private owner: string
+    private prefix: string = 'metric'
+    private primaryKey: string
+    private sortKey: string
     private pResolution: number
     private source: string | undefined
     private spans: SpanDef[]
+    private table: string
     private timestamp: number
     private ttl: number
 
@@ -178,10 +220,11 @@ export class CustomMetrics {
         if (options.pResolution != undefined && (options.pResolution < 0 || options.pResolution > 1000)) {
             throw new Error('Invalid "pResolution" option. Must be between 0 and 1000. Default is 0')
         }
+        if (options.consistent != null && typeof options.consistent != 'boolean') {
+            throw new Error('Bad type for "consistent" option')
+        }
         if (options.prefix) {
-            let model = Schema.models.Metric as any
-            model.pk.value = model.pk.value.replace('metric', options.prefix)
-            model.sk.value = model.sk.value.replace('metric', options.prefix)
+            this.prefix = options.prefix
         }
         if (options.buffer) {
             if (typeof options.buffer != 'object') {
@@ -189,42 +232,31 @@ export class CustomMetrics {
             }
             this.buffer = options.buffer
         }
-        if (options.onetable) {
-            this.db = options.onetable
-            try {
-                this.MetricModel = this.db.getModel('Metric')
-            } catch (err) {
-                /* istanbul ignore next */
-                this.db.addModel('Metric', Schema.models.Metric)
-                /* istanbul ignore next */
-                this.MetricModel = this.db.getModel('Metric')
-            }
+        this.primaryKey = options.primaryKey || 'pk'
+        this.sortKey = options.sortKey || 'sk'
+
+        if (options.client) {
+            this.client = options.client
         } else {
-            if (!options.client) {
-                throw new Error('Missing AWS V3 SDK DynamoDB client instance')
-            }
-            if (!options.tableName) {
-                throw new Error('Missing DynamoDB tableName property')
-            }
-            let schema = Object.assign({}, Schema)
-            schema.indexes.primary.hash = options.primaryKey || 'pk'
-            schema.indexes.primary.sort = options.sortKey || 'sk'
-            schema.params.typeField = options.typeField || '_type'
-            this.db = new Table({
-                client: options.client,
-                name: options.tableName,
-                partial: true,
-                schema,
-            })
-            this.MetricModel = this.db.getModel('Metric')
+            this.client = new DynamoDBClient(options.creds || {})
         }
+        if (!options.table && !options.tableName) {
+            throw new Error('Missing DynamoDB table name property')
+        }
+        //  DEPRECATE tableName
+        /* istanbul ignore next */
+        this.table = options.table || options.tableName
+        
         this.options = options
         this.owner = options.owner || 'account'
         this.spans = options.spans || DefaultSpans
         this.ttl = options.ttl || this.spans[this.spans.length - 1].period
 
-        if (this.options.source) {
-            this.source = this.options.source
+        if (options.consistent != null) {
+            this.consistent = options.consistent
+        }
+        if (options.source) {
+            this.source = options.source
         }
         this.pResolution = options.pResolution || DefaultResolution
     }
@@ -292,11 +324,7 @@ export class CustomMetrics {
         let metric: Metric | undefined
         do {
             let owner = options.owner || this.owner
-            metric = await this.MetricModel.get(
-                {owner, namespace, metric: metricName, dimensions: dimensions, version: Version},
-                // Need hidden to get pk/sk as namespace, metric are encoded 
-                {hidden: true}
-            )
+            metric = await this.getMetric(owner, namespace, metricName, dimensions)
             if (!metric) {
                 this.log.info(`Initializing new metric`, {namespace, metricName, dimensions, owner})
                 metric = this.initMetric(owner, namespace, metricName, dimensions)
@@ -439,15 +467,9 @@ export class CustomMetrics {
          */
         let dimString = this.makeDimensionString(dimensions)
 
-        let metric = await this.MetricModel.get({
-            owner,
-            namespace,
-            metric: metricName,
-            dimensions: dimString,
-            version: Version,
-        })
+        let metric = await this.getMetric(owner, namespace, metricName, dimString)
         if (!metric) {
-            return {dimensions, metric: metricName, namespace, period, points: [], owner}
+            return {dimensions, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
         /*
             Map the period to the closest span that has a period equal or larger.
@@ -458,16 +480,6 @@ export class CustomMetrics {
             span = metric.spans[metric.spans.length - 1]
             period = span.period
         }
-
-        //  Remove this trace soon
-        this.log.info(`Query ${namespace} ${metricName} ${dimString} ${period} ${statistic}`, {
-            owner,
-            metric,
-            accumulate: options.accumulate,
-            dimensions,
-            period,
-        })
-
         /*
             Aggregate data for all spans less than the desired span.
             Do this because spans are updated lazily on emit.
@@ -485,15 +497,10 @@ export class CustomMetrics {
             }
         } else {
             //  Should never happen as spans are created for the desired period
-            result = {dimensions, metric: metricName, namespace, period, points: [], owner}
+            result = {dimensions, metric: metricName, namespace, period, points: [], owner, samples: span.samples}
         }
-
-        //  Remove this trace soon
-        this.log.info(
-            `Metric query ${namespace}, ${metricName}, ${dimString || '[]'}, ` +
-                `period ${period}, statistic "${statistic}"`,
-            {result}
-        )
+        result.id = options.id
+        // this.log.info(`@@ QUERY RETURN`, {result})
         return result
     }
 
@@ -552,13 +559,16 @@ export class CustomMetrics {
         } else if (statistic == 'avg') {
             value /= Math.max(count, 1)
         }
+        /* istanbul ignore next */
+        let timestamp = (this.timestamp || Date.now()) * 1000
         return {
             dimensions: this.makeDimensionObject(metric.dimensions),
             metric: metric.metric,
             namespace: metric.namespace,
             owner: owner,
             period: span.period,
-            points: [{value, timestamp: this.timestamp * 1000, count}],
+            points: [{value, timestamp, count}],
+            samples: span.samples,
         }
     }
 
@@ -575,9 +585,10 @@ export class CustomMetrics {
             Also, the last point may have an end beyond the current time, so limit.
          */
         let timestamp = span.end - span.points.length * interval
-        let value: number | undefined
+        let value: number = undefined
         let i = 0
         for (let point of span.points) {
+            /* istanbul ignore else */
             if (point.count > 0) {
                 if (statistic == 'max') {
                     if (point.max != undefined) {
@@ -608,6 +619,8 @@ export class CustomMetrics {
                 } /* avg */ else {
                     value = point.sum / point.count
                 }
+            } else {
+                value = 0
             }
             //  Want timestamp to be the end of the point bucket
             timestamp += interval
@@ -622,6 +635,7 @@ export class CustomMetrics {
             period: span.period,
             points: points,
             owner: owner,
+            samples: span.samples,
         }
     }
 
@@ -667,6 +681,7 @@ export class CustomMetrics {
         this.assert(0 <= si && si < metric.spans.length)
         let span = metric.spans[si]
         let interval = span.period / span.samples
+        /* istanbul ignore next */
         let points = span.points || []
         let start = span.end - points.length * interval
 
@@ -790,71 +805,38 @@ export class CustomMetrics {
         /*
             Set the expiration TTL. Defaults to the longest span.
             Users may define a shorter TTL to prune metrics for inactive items.
+            WARNING: these are in seconds
         */
         if (ttl) {
-            //  OneTable converts to DynamoDB seconds
-            metric.expires = new Date((this.timestamp + ttl) * 1000)
+            metric.expires = (this.timestamp + ttl) * 1000
         }
-        let where: string | undefined = undefined
-        if (metric.seq != undefined) {
-            /* istanbul ignore next */
-            let seq = (metric.seq = metric.seq || 0)
-            /* istanbul ignore next */
-            if (metric.seq++ >= MaxSeq) {
-                metric.seq = 0
-            }
-            where = `\${seq} = {${seq}}`
-        }
-        /*
-            Create should be cheaper than update. Disable OneTable timestamps for the metric items.
-            Use a sequence number to detect simultaneous updated. If collision, will throw 
-            a ConditionalCheckFailedException and emit() will then retry.
-        */
-        await this.db.create('Metric', metric, {
-            exists: null,
-            timestamps: false,
-            partial: true,
-            return: false,
-            where,
-        })
-        /* KEEP
-        let size = JSON.stringify(result).length
-        this.log.info(
-            `Emit metric: ${metric.namespace}/${metric.metric}/${metric.dimensions} = ${point.sum}, msize ${size}`,
-            {
-                metric,
-                point,
-                stats,
-            }
-        ) */
+        await this.putMetric(metric)
     }
 
     /*
         Get list of metrics at a given level. The args: namespace and metrics may be undefined.
         Return {namespaces, metrics, dimensions} as possible.
-        DOC: add text about pagination and size limits
      */
     async getMetricList(
         namespace: string = undefined,
         metric: string = undefined,
-        options: MetricListOptions = {/* fields: ['pk', 'sk'], */ limit: MetricListLimit}
+        options: MetricListOptions = {limit: MetricListLimit}
     ): Promise<MetricList> {
         let map = {} as any
-        let next: object | undefined
         let owner = options.owner || this.owner
+        let next: object | undefined
+        let limit = options.limit || MetricListLimit
+        let items
         do {
-            options.next = next
             /* istanbul ignore next */
-            options.log = this.options.log == 'verbose' ? true : false
-            let list = await this.db.find('Metric', {owner, namespace, version: Version}, options)
-            if (list.length) {
-                for (let item of list) {
+            ;({items, next} = await this.findMetrics(owner, namespace, metric, limit, next))
+            if (items.length) {
+                for (let item of items) {
                     let ns = (map[item.namespace] = map[item.namespace] || {})
                     let met = (ns[item.metric] = ns[item.metric] || [])
                     met.push(item.dimensions)
                 }
             }
-            next = list.next
         } while (next)
 
         let result: MetricList = {namespaces: Object.keys(map)}
@@ -894,6 +876,164 @@ export class CustomMetrics {
             metric.spans.push(span)
         }
         return metric
+    }
+
+    async getMetric(owner: string, namespace: string, metric: string, dimensions: string): Promise<Metric> {
+        let command = new GetItemCommand({
+            TableName: this.table,
+            Key: {
+                [this.primaryKey]: {S: `${this.prefix}#${Version}#${owner}`},
+                [this.sortKey]: {S: `${this.prefix}#${namespace}#${metric}#${dimensions}`},
+            },
+            ConsistentRead: this.consistent,
+        })
+        // this.log.info(`@@ GET METRIC`, {command})
+        let data = await this.client.send(command)
+        if (data.Item) {
+            let item = unmarshall(data.Item)
+            return this.mapItemFromDB(item)
+        }
+        return null
+    }
+
+    async findMetrics(
+        owner: string,
+        namespace: string,
+        metric: string | undefined,
+        limit: number,
+        startKey: object
+    ): Promise<{items: Metric[]; next: object}> {
+        let key = [namespace]
+        if (metric) {
+            key.push(metric)
+        }
+        /* istanbul ignore next */
+
+        let start = startKey ? marshall(startKey) : undefined
+        let command = new QueryCommand({
+            TableName: this.table,
+            ExpressionAttributeNames: {
+                '#_0': this.primaryKey,
+                '#_1': this.sortKey,
+            },
+            ExpressionAttributeValues: {
+                ':_0': {S: `${this.prefix}#${Version}#${owner}`},
+                ':_1': {S: `${this.prefix}#${key.join('#')}`},
+            },
+            KeyConditionExpression: '#_0 = :_0 and begins_with(#_1, :_1)',
+            ConsistentRead: this.consistent,
+            Limit: limit,
+            ScanIndexForward: true,
+            ExclusiveStartKey: start,
+            ProjectionExpression: `${this.primaryKey}, ${this.sortKey}`,
+        })
+        // this.log.info(`@@ LIST COMMAND`, {command})
+        let result = await this.client.send(command)
+        // this.log.info(`@@ LIST RETURN`, {result})
+        let items = []
+        if (result.Items) {
+            for (let i = 0; i < result.Items.length; i++) {
+                let item = unmarshall(result.Items[i])
+                items.push(this.mapItemFromDB(item))
+            }
+        }
+        let next = undefined
+        /* istanbul ignore next */
+        if (result.LastEvaluatedKey) {
+            next = unmarshall(result.LastEvaluatedKey)
+        }
+        return {items, next}
+    }
+
+    /*
+        Use a sequence number to detect simultaneous updated. If collision, will throw 
+        a ConditionalCheckFailedException and emit() will then retry.
+    */
+    async putMetric(item: Metric) {
+        let ConditionExpression, ExpressionAttributeValues
+        let seq: number
+        if (item.seq != undefined) {
+            /* istanbul ignore next */
+            seq = item.seq = item.seq || 0
+            /* istanbul ignore next */
+            if (item.seq++ >= MaxSeq) {
+                item.seq = 0
+            }
+            ConditionExpression = `seq = :_0`
+            ExpressionAttributeValues = { ':_0': {N: seq.toString()} }
+        } else {
+            item.seq = 0
+        }
+        let mapped = this.mapItemToDB(item)
+        let params: PutItemCommandInput = {
+            TableName: this.table,
+            ReturnValues: 'NONE',
+            Item : marshall(mapped, {removeUndefinedValues: true}),
+            ConditionExpression,
+            ExpressionAttributeValues,
+        }
+        let command = new PutItemCommand(params)
+        this.log.info(`@@@ PUT METRIC`, {command})
+        return await this.client.send(command)
+    }
+
+    mapItemFromDB(data: any): Metric {
+        /*
+        for (let [key, items] of Object.entries(responses)) {
+            for (let item of items) {
+        */
+        let pk = data[this.primaryKey]
+        let sk = data[this.sortKey]
+        let owner = pk.split('#').pop()
+        let [, namespace, metric, dimensions] = sk.split('#')
+        let spans
+        if (data.spans) {
+            spans = data.spans.map((s) => {
+                return {
+                    end: s.se,
+                    period: s.sp,
+                    samples: s.ss,
+                    points: s.pt.map((p) => {
+                        return {
+                            count: p.c,
+                            max: p.x,
+                            min: p.m,
+                            pvalues: p.v,
+                            sum: p.s,
+                        }
+                    }),
+                }
+            })
+        }
+        let expires = data.expires
+        let seq = data.seq
+        return {dimensions, expires, metric, namespace, owner, seq, spans}
+    }
+
+    mapItemToDB(item: Metric) {
+        return {
+            [this.primaryKey]: `${this.prefix}#${Version}#${item.owner}`,
+            [this.sortKey]: `${this.prefix}#${item.namespace}#${item.metric}#${item.dimensions}`,
+            expires: Math.ceil(item.expires),
+            spans: item.spans.map((i) => {
+                return {
+                    se: i.end,
+                    sp: i.period,
+                    ss: i.samples,
+                    pt: i.points.map((p) => {
+                        return {
+                            c: p.count,
+                            x: p.max,
+                            m: p.min,
+                            s: p.sum,
+                            v: p.pvalues,
+                        }
+                    }),
+                }
+            }),
+            seq: item.seq,
+            _source: item._source,
+        }
     }
 
     /*

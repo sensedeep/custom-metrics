@@ -1,22 +1,13 @@
-import {DynamoDBClient} from '@aws-sdk/client-dynamodb'
-import {CustomMetrics, DefaultSpans, Metric, MetricQueryPoint, MetricQueryResult} from '../../src/index'
-import {Schema} from '../../src/schema'
+import {CustomMetrics, DefaultSpans, MetricQueryResult} from '../../src/index'
 import SenseLogs from 'senselogs'
 
-import {OneSchema, Table} from 'dynamodb-onetable'
-// import {OneSchema, Table} from '../../onetable/dist/cjs/index.js'
-
-const PORT = parseInt(process.env.DYNAMODB_PORT || '4765')
 const log = new SenseLogs({destination: 'stdout', format: 'human'})
 
-const Client = new DynamoDBClient({
-    endpoint: `http://localhost:${PORT}`,
-    region: 'local',
-    credentials: {
-        accessKeyId: 'test',
-        secretAccessKey: 'test',
-    },
-})
+/*
+    Share the client and table created in setup.ts
+ */
+const client = globalThis.DynamoDBClient
+const table = globalThis.TableName
 
 const dump = (...args) => {
     let s: string[] = []
@@ -62,4 +53,4 @@ const delay = async (time: number) => {
     })
 }
 
-export {Schema, Client, CustomMetrics, DefaultSpans, OneSchema, Table, delay, dump, dumpMetrics, log, print}
+export {table, client, CustomMetrics, DefaultSpans, delay, dump, dumpMetrics, log, print}

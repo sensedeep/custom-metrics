@@ -1,29 +1,12 @@
 /*
     buffer.ts - Test buffered emits
  */
-import {Client, Schema, CustomMetrics, DefaultSpans, log, Table, dump} from './utils/init'
+import {client, table, CustomMetrics, DefaultSpans, log, dump} from './utils/init'
 
 // jest.setTimeout(7200 * 1000)
 
-const TableName = 'BufferTestTable'
-const table = new Table({
-    name: TableName,
-    client: Client,
-    partial: true,
-    senselogs: log,
-    schema: Schema,
-})
-
-test('Create Table', async () => {
-    //  This will create a local table
-    if (!(await table.exists())) {
-        await table.createTable()
-        expect(await table.exists()).toBe(true)
-    }
-})
-
 test('Test', async () => {
-    let metrics = new CustomMetrics({onetable: table, log: true})
+    let metrics = new CustomMetrics({client, table, log: true})
     let timestamp = new Date(2000, 0, 1).getTime()
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
@@ -32,7 +15,7 @@ test('Test', async () => {
         Buffer some metrics and then flush
      */
     for (let i = 0; i < 4; i++) {
-        let metric = await metrics.emit('myspace/test', 'BufferMetric', 10, [], {buffer: {elapsed: 1800}, timestamp})
+        let metric = await metrics.emit('test/buffer', 'BufferMetric', 10, [], {buffer: {elapsed: 1800}, timestamp})
         expect(metric).toBeDefined()
         expect(metric.metric).toBe('BufferMetric')
         expect(metric.spans.length).toBe(1)
@@ -40,10 +23,10 @@ test('Test', async () => {
         expect(metric.spans[0].points[0].count).toBe(i + 1)
         timestamp += interval * 1000
     }
-    let r = await metrics.query('myspace/test', 'BufferMetric', {}, 3600, 'avg', {timestamp})
+    let r = await metrics.query('test/buffer', 'BufferMetric', {}, 3600, 'avg', {timestamp})
     expect(r).toBeDefined()
     expect(r.metric).toBe('BufferMetric')
-    expect(r.namespace).toBe('myspace/test')
+    expect(r.namespace).toBe('test/buffer')
     expect(r.period).toBe(3600)
     expect(r.points).toBeDefined()
     expect(r.points.length).toBe(1)
@@ -52,7 +35,7 @@ test('Test', async () => {
 })
 
 test('Test elapsed buffers', async () => {
-    let metrics = new CustomMetrics({onetable: table, log: true})
+    let metrics = new CustomMetrics({client, table, log: true})
     let timestamp = new Date(2000, 0, 1).getTime()
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
@@ -61,7 +44,7 @@ test('Test elapsed buffers', async () => {
         Buffer some metrics and then flush
      */
     for (let i = 0; i < 4; i++) {
-        let metric = await metrics.emit('myspace/test', 'BufferMetric', 1, [], {buffer: {elapsed: 1800}, timestamp})
+        let metric = await metrics.emit('test/buffer', 'BufferMetric', 1, [], {buffer: {elapsed: 1800}, timestamp})
         expect(metric).toBeDefined()
         expect(metric.metric).toBe('BufferMetric')
         expect(metric.spans.length).toBe(1)
@@ -73,12 +56,12 @@ test('Test elapsed buffers', async () => {
         Emit again after long delay this should cause the prior buffer to be flushed
      */
     timestamp += 86400 * 1000
-    let metric = await metrics.emit('myspace/test', 'BufferMetric', 7, [], {buffer: {elapsed: 1800}, timestamp})
+    await metrics.emit('test/buffer', 'BufferMetric', 7, [], {buffer: {elapsed: 1800}, timestamp})
 
-    let r = await metrics.query('myspace/test', 'BufferMetric', {}, 3600, 'avg', {timestamp})
+    let r = await metrics.query('test/buffer', 'BufferMetric', {}, 3600, 'avg', {timestamp})
     expect(r).toBeDefined()
     expect(r.metric).toBe('BufferMetric')
-    expect(r.namespace).toBe('myspace/test')
+    expect(r.namespace).toBe('test/buffer')
     expect(r.period).toBe(3600)
     expect(r.points).toBeDefined()
     expect(r.points.length).toBe(1)
@@ -87,25 +70,20 @@ test('Test elapsed buffers', async () => {
 })
 
 test('Test buffer API', async () => {
-    let metrics = new CustomMetrics({onetable: table})
-    let metric = await metrics.emit('myspace/test', 'CoverageMetric', 1, [], {buffer: {sum: 1}})
+    let metrics = new CustomMetrics({client, table})
+    let metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [], {buffer: {sum: 1}})
     expect(metric).toBeDefined()
 
-    metrics = new CustomMetrics({onetable: table, buffer: {elapsed: 1800}})
-    metric = await metrics.emit('myspace/test', 'CoverageMetric', 1, [])
+    metrics = new CustomMetrics({client, table, buffer: {elapsed: 1800}})
+    metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [])
     expect(metric).toBeDefined()
 
-    metrics = new CustomMetrics({onetable: table, buffer: {elapsed: 1800}})
-    metric = await metrics.emit('myspace/test', 'CoverageMetric', 1, [])
+    metrics = new CustomMetrics({client, table, buffer: {elapsed: 1800}})
+    metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [])
     expect(metric).toBeDefined()
 
-    metrics = new CustomMetrics({onetable: table})
-    metric = await metrics.emit('myspace/test', 'CoverageMetric', 1, [], {buffer: {count: 1}})
-    metric = await metrics.emit('myspace/test', 'CoverageMetric', 1, [], {buffer: {count: 1}})
+    metrics = new CustomMetrics({client, table})
+    metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [], {buffer: {count: 1}})
+    metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [], {buffer: {count: 1}})
     expect(metric).toBeDefined()
-})
-
-test('Destroy Table', async () => {
-    await table.deleteTable('DeleteTableForever')
-    expect(await table.exists()).toBe(false)
 })

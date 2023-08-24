@@ -1,6 +1,6 @@
 {
     "name": "custom-metrics",
-    "version": "0.7.3",
+    "version": "0.7.4",
     "description": "Low cost custom metrics for AWS",
     "main": "dist/cjs/index.js",
     "module": "dist/mjs/index.js",
@@ -35,12 +35,14 @@
     "license": "MIT",
     "scripts": {
         "build": "rm -fr dist/* && tsc -p tsconfig.json && tsc -p tsconfig-cjs.json && ./fixup",
-        "test": "jest",
+        "test": "jest --runInBand",
         "test-cov": "jest --coverage"
     },
     "dependencies": {
         "@aws-sdk/client-dynamodb": "^3.395.0",
-        "@aws-sdk/util-dynamodb": "^3.395.0",
+        "@aws-sdk/util-dynamodb": "^3.395.0"
+    },
+    "peerDependencies": {
         "dynamodb-onetable": "^2.6.4"
     },
     "devDependencies": {

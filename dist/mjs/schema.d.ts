@@ -47,6 +47,9 @@ declare const Schema: {
                 readonly default: 1;
                 readonly encode: readonly ["pk", "#", "1"];
             };
+            readonly id: {
+                readonly type: "string";
+            };
             readonly spans: {
                 readonly type: "array";
                 readonly required: true;

@@ -1,42 +1,27 @@
 /*
-    basic.ts - base emit / query
+    basic.ts - base operations: emit / query
  */
-import {Schema, Client, CustomMetrics, log, Table, dump} from './utils/init'
+import {client, table, CustomMetrics, log, dump} from './utils/init'
 
 jest.setTimeout(7200 * 1000)
 
-const TableName = 'BasicTestTable'
-const table = new Table({
-    name: TableName,
-    client: Client,
-    partial: true,
-    senselogs: log,
-    schema: Schema, 
-})
-
-test('Create Table', async () => {
-    //  This will create a local table
-    if (!(await table.exists())) {
-        await table.createTable()
-        expect(await table.exists()).toBe(true)
-    }
-})
-
 test('Constructor with OneTable', async () => {
-    let metrics = new CustomMetrics({onetable: table, log: true})
-
+    let metrics = new CustomMetrics({client, table})
     let timestamp = new Date(2000, 0, 1).getTime()
-    let metric = await metrics.emit('myspace/test', 'FirstMetric', 10, [], {timestamp})
+
+    //  This first emit will initialize the metric
+    let metric = await metrics.emit('test/basic', 'FirstMetric', 10, [], {timestamp})
     expect(metric).toBeDefined()
 
-    let r = await metrics.query('myspace/test', 'FirstMetric', {}, 300, 'sum', {timestamp})
+    //  The second emit will read the metric and update
+    metric = await metrics.emit('test/basic', 'FirstMetric', 10, [{}, {Rocket:'SaturnV'}], {timestamp})
+
+    let r = await metrics.query('test/basic', 'FirstMetric', {}, 300, 'sum', {timestamp})
     expect(r).toBeDefined()
 
-    let list = await metrics.getMetricList('myspace/test', 'FirstMetric')
+    let list = await metrics.getMetricList('test/basic')
     expect(list).toBeDefined()
-})
 
-test('Destroy Table', async () => {
-    await table.deleteTable('DeleteTableForever')
-    expect(await table.exists()).toBe(false)
+    list = await metrics.getMetricList('test/basic', 'FirstMetric')
+    expect(list).toBeDefined()
 })

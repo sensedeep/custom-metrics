@@ -1,10 +1,35 @@
-import { Schema } from './schema';
-import { Entity, Table } from '../onetable/dist/cjs/index.js';
+import { DynamoDBClient, DynamoDBClientConfig } from '@aws-sdk/client-dynamodb';
 type SpanDef = {
     period: number;
     samples: number;
 };
 export declare const DefaultSpans: SpanDef[];
+export type Metric = {
+    dimensions: string;
+    expires?: number;
+    id?: string;
+    metric: string;
+    namespace: string;
+    owner?: string;
+    version?: number;
+    spans: Span[];
+    seq?: number;
+    _source?: string;
+};
+export type Point = {
+    count: number;
+    max?: number;
+    min?: number;
+    pvalues?: number[];
+    sum: number;
+    timestamp?: number;
+};
+export type Span = {
+    end: number;
+    period: number;
+    samples: number;
+    points: Point[];
+};
 export type MetricDimensions = {
     [key: string]: unknown;
 };
@@ -25,17 +50,20 @@ export type MetricQueryPoint = {
 };
 export type MetricQueryResult = {
     dimensions: MetricDimensions;
+    id?: string;
     metric: string;
     namespace: string;
     owner: string;
     period: number;
     points: MetricQueryPoint[];
+    samples: number;
 };
 export type MetricOptions = {
     buffer?: MetricBufferOptions;
-    client?: object;
+    client?: DynamoDBClient;
+    consistent?: boolean;
+    creds?: DynamoDBClientConfig;
     log?: true | 'verbose' | any;
-    onetable?: Table;
     owner?: string;
     primaryKey?: string;
     sortKey?: string;
@@ -43,6 +71,7 @@ export type MetricOptions = {
     pResolution?: number;
     source?: string;
     spans?: SpanDef[];
+    table?: string;
     tableName?: string;
     typeField?: string;
     ttl?: number;
@@ -62,31 +91,32 @@ export type MetricEmitOptions = {
 export type MetricListOptions = {
     log?: boolean;
     limit?: number;
-    next?: object;
     owner?: string;
 };
 export type MetricQueryOptions = {
     accumulate?: boolean;
+    id?: string;
     owner?: string;
     timestamp?: number;
 };
-export type Span = Entity<typeof Schema.models.Metric.spans.items.schema>;
-export type Point = Entity<typeof Schema.models.Metric.spans.items.schema.points.items.schema>;
-export type Metric = Entity<typeof Schema.models.Metric>;
 type InstanceMap = {
     [key: string]: CustomMetrics;
 };
 export declare class CustomMetrics {
+    private consistent;
     private buffer;
     private buffers;
-    private db;
+    private client;
     private log;
-    private MetricModel;
     private options;
     private owner;
+    private prefix;
+    private primaryKey;
+    private sortKey;
     private pResolution;
     private source;
     private spans;
+    private table;
     private timestamp;
     private ttl;
     constructor(options?: MetricOptions);
@@ -107,6 +137,42 @@ export declare class CustomMetrics {
     private updateMetric;
     getMetricList(namespace?: string, metric?: string, options?: MetricListOptions): Promise<MetricList>;
     private initMetric;
+    getMetric(owner: string, namespace: string, metric: string, dimensions: string): Promise<Metric>;
+    findMetrics(owner: string, namespace: string, metric: string | undefined, limit: number, startKey: object): Promise<{
+        items: Metric[];
+        next: object;
+    }>;
+    putMetric(item: Metric): Promise<import("@aws-sdk/client-dynamodb").PutItemCommandOutput>;
+    mapItemFromDB(data: any): Metric;
+    mapItemToDB(item: Metric): {
+        [x: string]: string | number | {
+            se: number;
+            sp: number;
+            ss: number;
+            pt: {
+                c: number;
+                x: number;
+                m: number;
+                s: number;
+                v: number[];
+            }[];
+        }[];
+        expires: number;
+        spans: {
+            se: number;
+            sp: number;
+            ss: number;
+            pt: {
+                c: number;
+                x: number;
+                m: number;
+                s: number;
+                v: number[];
+            }[];
+        }[];
+        seq: number;
+        _source: string;
+    };
     static allocInstance(tags: object, options?: MetricOptions): CustomMetrics;
     static freeInstance(tags: object): void;
     static freeInstanceByKey(key: string): void;

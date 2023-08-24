@@ -14,10 +14,10 @@ publish promote: build cov
 	coveralls < coverage/lcov.info
 
 test: always
-	jest
+	jest --runInBand
 
 cov:
-	jest --coverage
+	jest --runInBand --coverage
 
 pubcov: cov
 	coveralls < coverage/lcov.info
