@@ -198,28 +198,31 @@ If you are updating metrics extremely frequently, CustomMetrics can impose a mea
 
 CustomMetrics are stored in a DynamoDB table using the following single-table schema. 
 
-| Field | Attribute | Encoding
+| Field | Attribute | Encoding | Notes
 |-|-|
-primaryKey | primaryKey | ${prefix}#${version}#${owner}
-sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions}
-expires | expires | number
-spans | spans | string
+primaryKey | primaryKey | ${prefix}#${version}#${owner} | 
+sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions} |
+expires | expires | number | Time in seconds when for DynamoDB auto removal
+spans | spans | string | Array of time spans
 
 The metric spans are encoded as:
 
-| Field | Attribute | Encoding
+| Field | Attribute | Encoding | Notes
 |-|-|
-end | se | number
-period | sp | number
-samples | ss | number
-points | pt | array
+end | se | number | Time in seconds of the end of the last point in the span
+period | sp | number | Span period in seconds
+samples | ss | number | Number of data points in the span
+points | pt | array | Data points 
 
 The span points are encoded as:
 
-| Field | Attribute | Encoding
+| Field | Attribute | Encoding | Notes
 |-|-|
-count | c | number
-sum | s | number
+count | c | number | Count of the values in sum
+sum | s | number | Sum of values
+max | x | number | Maximum value seen
+min | m | number | Minimum value seen
+pvalues | v | array | P values
 
 ### CustomMetrics Class API
 
@@ -229,8 +232,11 @@ The CustomMetrics class provides the public API for CustomMetrics and public pro
 
 ```javascript
 const metrics = new CustomMetrics({
-    onetable: db,
     owner: 'my-service',
+    primaryKey: 'pk',
+    region: 'us-east-1',
+    sortKey: 'sk',
+    table: 'MyTable',
 })
 ```
 
@@ -241,11 +247,8 @@ The `options` parameter is of type `object` with the following properties:
 | Property | Type | Description | 
 | -------- | :--: |------------ |
 | buffer | `object` | Buffer metric emits. Has properties: {count, elapsed, sum}
-| client | `object` | AWS DynamoDB client instance
+| client | `object` | AWS DynamoDB client instance. Optional.
 | log | `object` | Logging object with methods for 'info', 'error' and 'warn'
-<!--
-| onetable | `OneTable Table object` | OneTable instance to communicate with DynamoDB
--->
 | owner | `string` | Unique owner of the metrics. This is used to compute the primary key for the metric data item.
 | primaryKey | `string` | Name of the DynamoDB table primary key attribute. Defaults to 'pk'.
 | sortKey | `string` | Name of the DynamoDB table sort key attribute. Defaults to 'sk'.
@@ -253,15 +256,17 @@ The `options` parameter is of type `object` with the following properties:
 | pResolution | `number` | Number of values to store to compute P value statistics. Defaults to zero.
 | source | `string` | Reserved
 | spans | `array` | Array of span definitions. See below.
-| tableName | `string` | Name of the DynamoDB table to use. Required if using `client` instead of `onetable` options.
-| typeField | `array` | Onetable attribute used to store the model type. Defaults to `_type`.
+| tableName | `string` | Name of the DynamoDB table to use. (Required)
 | ttl | `number` | Maximum lifespan of the metrics in seconds.
 
 For example:
 
 ```javascript
 const metrics = new CustomMetrics({
-    onetable: onetable,
+    table: 'MyTable',
+    region: 'us-east-1',
+    primaryKey: 'pk',
+    sortKey: 'sk',
     owner: 'my-service',
     pResolution: 100,
     ttl: 6 * 24 * 86400,
@@ -291,8 +296,7 @@ Here is an example of a higher resolution set of spans that keep metric values f
 
 ```typescript
 const metrics = new CustomMetrics({
-    onetable: onetable,
-    owner: 'my-service',
+    table: 'mytable',
     spans: [
         {period: 1 * 60, samples: 5}, //  interval: 5 secs
         {period: 5 * 60, samples: 10}, //  interval: 30 secs
@@ -314,13 +318,22 @@ await metrics.emit('Acme/Metrics', 'DataSent', 123, [], {
 })
 ```
 
-This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first.  If the 'elapsed' property is not provided, the default elapsed period is the interval of your lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required and will save buffered metrics upon Lambda instance termination. 
+This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first.  If the 'elapsed' property is not provided, the default elapsed period is the interval of your lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
 
-Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
+You can also flush metrics manually by calling 'flush' or 'flushAll' which flushes metrics for all CustomMetrics instances.
 
-Furthermore, if you have a very large number of metrics in one Lambda instance, it is possible that the Lambda instance may not be able to save all buffered metrics during the Lambda termination timeout. This can be somewhat mitigated by using shorter buffering criteria.
+```javascript
+await metrics.flush()
+await CustomMetrics.flushAll()
+```
 
-For these reasons, don't use buffered metrics if you require absolute precision. But if you have metrics where less than perfect accuracy is acceptable, then buffered metrics can give very large performance gains.
+If you configure a Lambda layer (any layer will do), CustomMetrics will save buffered metrics upon Lambda instance termination. Unfortunately, Lambda will only send a termination signal to lambdas that utilize a Lambda layer.
+
+Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by emit option.buffer) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
+
+Furthermore, if you have a very large number of metrics in one Lambda instance, it is possible that the Lambda instance may not be able to save all buffered metrics during Lambda termination. This can be somewhat mitigated by using shorter buffering criteria.
+
+For these reasons, don't use buffered metrics if you require absolute precision. But if you have metrics where less than perfect accuracy is acceptable, then buffered metrics can give very large performance gains with minimal loss of precision.
 
 ## Methods
 

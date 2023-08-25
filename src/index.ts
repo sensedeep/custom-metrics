@@ -116,10 +116,9 @@ export type MetricOptions = {
     source?: string
     spans?: SpanDef[]
     table?: string
+    ttl?: number
     // DEPRECATE
     tableName?: string
-    typeField?: string
-    ttl?: number
 }
 
 export type MetricBufferOptions = {
@@ -139,7 +138,6 @@ export type MetricEmitOptions = {
 export type MetricListOptions = {
     log?: boolean
     limit?: number
-    // next?: object
     owner?: string
 }
 
@@ -246,7 +244,7 @@ export class CustomMetrics {
         //  DEPRECATE tableName
         /* istanbul ignore next */
         this.table = options.table || options.tableName
-        
+
         this.options = options
         this.owner = options.owner || 'account'
         this.spans = options.spans || DefaultSpans
@@ -343,15 +341,19 @@ export class CustomMetrics {
             } else {
                 this.addValue(metric, point.timestamp, point, 0)
             }
-            try {
-                await this.updateMetric(metric, point, ttl)
+            /* istanbul ignore next */
+            if (this.source) {
+                metric._source = this.source
+            }
+            /*
+                Set the expiration TTL. Defaults to the longest span.
+                Users may define a shorter TTL to prune metrics for inactive items.
+            */
+            if (ttl) {
+                metric.expires = this.timestamp + ttl
+            }
+            if (await this.putMetric(metric)) {
                 break
-            } catch (err: any) {
-                /* istanbul ignore next */
-                if (err.code != 'ConditionalCheckFailedException') {
-                    this.log.info(`Emit exception code ${err.code} message ${err.message}`, err)
-                    throw err
-                }
             }
             /* istanbul ignore next */
             if (retries == 0) {
@@ -359,7 +361,11 @@ export class CustomMetrics {
                 break
             }
             /* istanbul ignore next */
-            this.log.info(`Retry metric update`, {retries})
+            /*
+            this.log.info(`Retry ${MaxRetries - retries} metric update ${metric.namespace} ${metric.metric} ${metric.dimensions}`, {
+                retries,
+                metric,
+            }) */
         } while (retries-- > 0)
         return metric
     }
@@ -500,7 +506,6 @@ export class CustomMetrics {
             result = {dimensions, metric: metricName, namespace, period, points: [], owner, samples: span.samples}
         }
         result.id = options.id
-        // this.log.info(`@@ QUERY RETURN`, {result})
         return result
     }
 
@@ -795,25 +800,6 @@ export class CustomMetrics {
     }
 
     /*
-        Save metric to disk. Point is provided just for logging
-     */
-    private async updateMetric(metric: Metric, point: Point, ttl: number) {
-        /* istanbul ignore next */
-        if (this.source) {
-            metric._source = this.source
-        }
-        /*
-            Set the expiration TTL. Defaults to the longest span.
-            Users may define a shorter TTL to prune metrics for inactive items.
-            WARNING: these are in seconds
-        */
-        if (ttl) {
-            metric.expires = (this.timestamp + ttl) * 1000
-        }
-        await this.putMetric(metric)
-    }
-
-    /*
         Get list of metrics at a given level. The args: namespace and metrics may be undefined.
         Return {namespaces, metrics, dimensions} as possible.
      */
@@ -887,7 +873,6 @@ export class CustomMetrics {
             },
             ConsistentRead: this.consistent,
         })
-        // this.log.info(`@@ GET METRIC`, {command})
         let data = await this.client.send(command)
         if (data.Item) {
             let item = unmarshall(data.Item)
@@ -927,9 +912,7 @@ export class CustomMetrics {
             ExclusiveStartKey: start,
             ProjectionExpression: `${this.primaryKey}, ${this.sortKey}`,
         })
-        // this.log.info(`@@ LIST COMMAND`, {command})
         let result = await this.client.send(command)
-        // this.log.info(`@@ LIST RETURN`, {result})
         let items = []
         if (result.Items) {
             for (let i = 0; i < result.Items.length; i++) {
@@ -960,7 +943,7 @@ export class CustomMetrics {
                 item.seq = 0
             }
             ConditionExpression = `seq = :_0`
-            ExpressionAttributeValues = { ':_0': {N: seq.toString()} }
+            ExpressionAttributeValues = {':_0': {N: seq.toString()}}
         } else {
             item.seq = 0
         }
@@ -968,20 +951,32 @@ export class CustomMetrics {
         let params: PutItemCommandInput = {
             TableName: this.table,
             ReturnValues: 'NONE',
-            Item : marshall(mapped, {removeUndefinedValues: true}),
+            Item: marshall(mapped, {removeUndefinedValues: true}),
             ConditionExpression,
             ExpressionAttributeValues,
         }
         let command = new PutItemCommand(params)
-        this.log.info(`@@@ PUT METRIC`, {command})
-        return await this.client.send(command)
+        try {
+            await this.client.send(command)
+            return true
+        } catch (err) {
+            /* istanbul ignore next */ 
+            (function(err) {
+                //  SDK V3 puts the code in err.name (Ugh!)
+                let code = err.code || err.name
+                if (code == 'ConditionalCheckFailedException') {
+                } else if (code == 'ProvisionedThroughputExceededException') {
+                    this.log.info(`Provisioned throughput exceeded: ${err.message}`, {err, cmd: command, item})
+                } else {
+                    this.log.info(`Emit exception code ${err.name} ${err.code} message ${err.message}`, {err, cmd: command, item})
+                    throw err
+                }
+                return false
+            })(err)
+        }
     }
 
     mapItemFromDB(data: any): Metric {
-        /*
-        for (let [key, items] of Object.entries(responses)) {
-            for (let item of items) {
-        */
         let pk = data[this.primaryKey]
         let sk = data[this.sortKey]
         let owner = pk.split('#').pop()
@@ -994,13 +989,17 @@ export class CustomMetrics {
                     period: s.sp,
                     samples: s.ss,
                     points: s.pt.map((p) => {
-                        return {
-                            count: p.c,
-                            max: p.x,
-                            min: p.m,
-                            pvalues: p.v,
-                            sum: p.s,
+                        let point = {count: Number(p.c), sum: Number(p.s)} as Point
+                        if (p.x != null) {
+                            point.max = Number(p.x)
                         }
+                        if (p.m != null) {
+                            point.min = Number(p.m)
+                        }
+                        if (p.v) {
+                            point.pvalues = p.v
+                        }
+                        return point
                     }),
                 }
             })
@@ -1011,29 +1010,39 @@ export class CustomMetrics {
     }
 
     mapItemToDB(item: Metric) {
-        return {
+        let result = {
             [this.primaryKey]: `${this.prefix}#${Version}#${item.owner}`,
             [this.sortKey]: `${this.prefix}#${item.namespace}#${item.metric}#${item.dimensions}`,
-            expires: Math.ceil(item.expires),
+            expires: item.expires,
             spans: item.spans.map((i) => {
                 return {
                     se: i.end,
                     sp: i.period,
                     ss: i.samples,
-                    pt: i.points.map((p) => {
-                        return {
-                            c: p.count,
-                            x: p.max,
-                            m: p.min,
-                            s: p.sum,
-                            v: p.pvalues,
+                    pt: i.points.map((point) => {
+                        let p = {c: point.count, s: this.round(point.sum)} as any
+                        if (point.max != null) {
+                            p.x = this.round(point.max)
                         }
+                        if (point.min != null) {
+                            p.m = this.round(point.min)
+                        }
+                        if (point.pvalues) {
+                            p.v = point.pvalues
+                        }
+                        return p
                     }),
                 }
             }),
             seq: item.seq,
             _source: item._source,
         }
+        for (let span of result.spans) {
+            for (let p of span.pt) {
+                this.assert(p.s != null && !isNaN(p.s))
+            }
+        }
+        return result
     }
 
     /*
@@ -1079,13 +1088,6 @@ export class CustomMetrics {
         return Math.ceil(timestamp / interval) * interval
     }
 
-    /* KEEP
-    getPValue(point: Point, p: number): number {
-        let pvalues = point.pvalues.sort()
-        let nth = Math.min(Math.round((pvalues.length * p) / 100 + 1), pvalues.length - 1)
-        return point.pvalues[nth]
-    } */
-
     /* istanbul ignore next */
     private assert(c) {
         if (!c && Assert) {
@@ -1107,6 +1109,15 @@ export class CustomMetrics {
     /* istanbul ignore next */
     private error(message: string, context = {}) {
         console.log('ERROR: ' + message, context)
+    }
+
+    //  Overcome Javascript number precision issues
+    round(n) {
+        /* istanbul ignore next */
+        if (isNaN(n) || n == null) {
+            return 0
+        }
+        return n.toFixed(16 - n.toFixed(0).length) - 0
     }
 
     /* istanbul ignore next */
