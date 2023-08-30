@@ -993,9 +993,8 @@ export class CustomMetrics {
         try {
             await this.client.send(command)
             return true
-        } catch (err) {
-            /* istanbul ignore next */ ;(function (err, log) {
-                /* istanbul ignore next */
+        } catch (err) /* istanbul ignore next */ {
+                ;(function (err, log) {
                 //  SDK V3 puts the code in err.name (Ugh!)
                 let code = err.code || err.name
                 if (code == 'ConditionalCheckFailedException') {
