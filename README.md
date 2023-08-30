@@ -38,7 +38,7 @@ CustomMetrics achieves these savings by supporting only "latest" period metrics.
 -   Supports multiple services, apps, namespaces and metrics in a single DynamoDB table.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
--   Clean, readable small code base (~1K lines).
+-   Clean, readable small code base (~1.2K lines).
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
 
 ## Database
@@ -82,19 +82,6 @@ const dynamoDbClient = new DynamoDBClient()
 ```javascript
 const metrics = new CustomMetrics({
     client: myDynamoDbClient,
-    table: 'MyTable',
-    primaryKey: 'pk',
-    sortKey: 'sk',
-})
-```
-
-## Metrics Scoping
-
-Metrics emitted by a CustomMetrics instance will be scoped and "owned" by the `owner` property you specify with the constructor. This is typically a service, application or account name. CustomMetric instances with different owners are uniquely stored and are safely isolated from other metrics. If omitted, the owner defaults to **'account'**.
-
-```javascript
-const cartMetrics = new CustomMetrics({
-    owner: 'cart',
     table: 'MyTable',
     primaryKey: 'pk',
     sortKey: 'sk',
@@ -189,6 +176,21 @@ let list: MetricList = await metrics.getMetricList('Acme/Metrics', "speed")
 
 This will return a list of dimensions in **list.dimensions**.
 
+## Metrics Scoping
+
+You can scope metrics by chosing unique namespaces for different applications or services, or by using various dimensions for applications/services. This is the preferred design pattern.
+
+You can also scope metrics by selecting a unique `owner` property via the CustomMetrics constructor. This property is used, in the primary key of metric items. This owner defaults to **'account'**.
+
+```javascript
+const cartMetrics = new CustomMetrics({
+    owner: 'cart',
+    table: 'MyTable',
+    primaryKey: 'pk',
+    sortKey: 'sk',
+})
+```
+
 ## Limitations
 
 If you are updating metrics extremely frequently, CustomMetrics can impose a meaningful DynamoDB write load as each metric update will result in a database write. If you have such high frequency metric updates, consider using
@@ -248,7 +250,7 @@ The `options` parameter is of type `object` with the following properties:
 | -------- | :--: |------------ |
 | buffer | `object` | Buffer metric emits. Has properties: {count, elapsed, sum}
 | client | `object` | AWS DynamoDB client instance. Optional.
-| log | `object` | Logging object with methods for 'info', 'error' and 'warn'
+| log | `boolean | object` | Set to true for default logging or provide a logging object with methods for 'info', 'error' and 'trace'. Default to null.
 | owner | `string` | Unique owner of the metrics. This is used to compute the primary key for the metric data item.
 | primaryKey | `string` | Name of the DynamoDB table primary key attribute. Defaults to 'pk'.
 | sortKey | `string` | Name of the DynamoDB table sort key attribute. Defaults to 'sk'.
@@ -270,6 +272,7 @@ const metrics = new CustomMetrics({
     owner: 'my-service',
     pResolution: 100,
     ttl: 6 * 24 * 86400,
+    log: true,
 })
 ```
 
@@ -305,6 +308,12 @@ const metrics = new CustomMetrics({
     ]
 })
 ```
+
+## Logging
+
+If the `log` constructor option is set to true, CustomMetrics will log errors to the console. If set to "verbose", CustomMetrics will also trace metric database accesses to the console.
+
+Alternatively, the `log` constructor can be set to a logging object such as [SenseLogs](https://www.npmjs.com/package/senselogs) that provides `info`, `error` and `trace` methods.
 
 ## Buffering
 
