@@ -31,18 +31,7 @@ class CustomMetrics {
         this.consistent = false;
         this.buffers = {};
         this.prefix = 'metric';
-        if (options.log == true) {
-            this.log = { info: this.nop, error: this.error };
-        }
-        else if (options.log == 'verbose') {
-            this.log = { info: this.info, error: this.error };
-        }
-        else if (options.log) {
-            this.log = options.log;
-        }
-        else {
-            this.log = { info: this.nop, error: this.nop };
-        }
+        this.log = new Log(options.log);
         if (options.ttl && typeof options.ttl != 'number') {
             throw new Error('Bad type for "ttl" option');
         }
@@ -102,23 +91,28 @@ class CustomMetrics {
         if (!namespace || !metricName) {
             throw new Error('Missing emit namespace / metric argument');
         }
+        if (!Array.isArray(dimensionsList)) {
+            throw new Error('Dimensions must be an array');
+        }
         if (dimensionsList.length == 0) {
             dimensionsList = [{}];
         }
         this.timestamp = Math.floor((options.timestamp || Date.now()) / 1000);
         let point;
-        let buffer = options.buffer || this.buffer;
-        if (buffer && Buffering) {
-            return await this.bufferMetric(namespace, metricName, value, dimensionsList, options);
-        }
         point = { count: 1, sum: value };
         return await this.emitDimensions(namespace, metricName, point, dimensionsList, options);
     }
     async emitDimensions(namespace, metricName, point, dimensionsList, options) {
         let result;
-        for (let dimensions of dimensionsList) {
-            let dimString = this.makeDimensionString(dimensions);
-            result = await this.emitDimensionedMetric(namespace, metricName, point, dimString, options);
+        for (let dim of dimensionsList) {
+            let dimensions = this.makeDimensionString(dim);
+            let buffer = options.buffer || this.buffer;
+            if (buffer && Buffering) {
+                result = await this.bufferMetric(namespace, metricName, point, dimensions, options);
+            }
+            else {
+                result = await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options);
+            }
         }
         return result;
     }
@@ -126,11 +120,12 @@ class CustomMetrics {
         let ttl = options.ttl != undefined ? options.ttl : this.ttl;
         let retries = MaxRetries;
         let metric;
+        let backoff = 10;
+        let chan = options.log == true ? 'info' : 'trace';
         do {
             let owner = options.owner || this.owner;
             metric = await this.getMetric(owner, namespace, metricName, dimensions);
             if (!metric) {
-                this.log.info(`Initializing new metric`, { namespace, metricName, dimensions, owner });
                 metric = this.initMetric(owner, namespace, metricName, dimensions);
             }
             if (point.timestamp) {
@@ -145,47 +140,50 @@ class CustomMetrics {
             else {
                 this.addValue(metric, point.timestamp, point, 0);
             }
-            try {
-                await this.updateMetric(metric, point, ttl);
-                break;
+            if (this.source) {
+                metric._source = this.source;
             }
-            catch (err) {
-                if (err.code != 'ConditionalCheckFailedException') {
-                    this.log.info(`Emit exception code ${err.code} message ${err.message}`, err);
-                    throw err;
-                }
+            if (ttl) {
+                metric.expires = this.timestamp + ttl;
+            }
+            if (await this.putMetric(metric, options)) {
+                break;
             }
             if (retries == 0) {
-                this.log.error(`Metric has too many retries`, { namespace, metricName, dimensions });
+                this.log.error(`Metric update has too many retries`, { namespace, metricName, dimensions });
                 break;
             }
-            this.log.info(`Retry metric update`, { retries });
+            this.log[chan](`Retry ${MaxRetries - retries} metric update ${metric.namespace} ${metric.metric} ${metric.dimensions}`, {
+                retries,
+                metric,
+            });
+            backoff = backoff * 2;
+            this.log[chan](`Retry backoff ${backoff} ${this.jitter(backoff)}`);
+            await this.delay(this.jitter(backoff));
         } while (retries-- > 0);
         return metric;
     }
-    async bufferMetric(namespace, metricName, value, dimensionsList, options) {
+    async bufferMetric(namespace, metricName, point, dimensions, options) {
         let buffer = options.buffer || this.buffer;
         let interval = this.spans[0].period / this.spans[0].samples;
-        let key = `${namespace}|${metricName}|${JSON.stringify(dimensionsList)}`;
+        let key = `${namespace}|${metricName}|${JSON.stringify(dimensions)}`;
         let elt = (this.buffers[key] = this.buffers[key] || {
             count: 0,
             sum: 0,
             timestamp: this.timestamp + (buffer.elapsed || interval),
             namespace: namespace,
             metric: metricName,
-            dimensions: dimensionsList,
+            dimensions,
         });
         if (buffer.force ||
             (buffer.sum && elt.sum >= buffer.sum) ||
             (buffer.count && elt.count >= buffer.count) ||
             this.timestamp >= elt.timestamp) {
-            this.log.info(`Emit buffered metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${elt.count} remaining ${elt.timestamp - this.timestamp}`);
-            let point = { count: elt.count, sum: elt.sum, timestamp: elt.timestamp };
-            await this.emitDimensions(namespace, metricName, point, dimensionsList, options);
+            point.timestamp = elt.timestamp;
+            await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options);
         }
-        elt.count++;
-        elt.sum += value;
-        this.log.info(`Buffer metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${elt.count}, remaining ${elt.timestamp - this.timestamp}`);
+        elt.count += point.count;
+        elt.sum += point.sum;
         CustomMetrics.saveInstance({ key }, this);
         return {
             spans: [{ points: [{ count: elt.count, sum: elt.sum }] }],
@@ -208,21 +206,18 @@ class CustomMetrics {
     async flush() {
         for (let elt of Object.values(this.buffers)) {
             let point = { count: elt.count, sum: elt.sum };
-            for (let dimensions of elt.dimensions) {
-                await this.emitDimensionedMetric(elt.namespace, elt.metric, point, this.makeDimensionString(dimensions));
-            }
+            await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions);
         }
         this.buffers = {};
     }
     async query(namespace, metricName, dimensions, period, statistic, options = {}) {
         this.timestamp = Math.floor((options.timestamp || Date.now()) / 1000);
-        this.log.info(`Query metrics ${namespace}/${metricName}`, { dimensions });
         let owner = options.owner || this.owner;
         await this.flush();
         let dimString = this.makeDimensionString(dimensions);
         let metric = await this.getMetric(owner, namespace, metricName, dimString);
         if (!metric) {
-            return { dimensions, metric: metricName, namespace, period, points: [], owner, samples: 0 };
+            return { dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0 };
         }
         let span = metric.spans.find((s) => period <= s.period);
         if (!span) {
@@ -243,6 +238,13 @@ class CustomMetrics {
             result = { dimensions, metric: metricName, namespace, period, points: [], owner, samples: span.samples };
         }
         result.id = options.id;
+        this.log[options.log == true ? 'info' : 'trace'](`Query metrics ${namespace}, ${metricName}`, {
+            dimensions,
+            period,
+            statistic,
+            options,
+            result,
+        });
         return result;
     }
     accumulateMetric(metric, span, statistic, owner) {
@@ -380,7 +382,8 @@ class CustomMetrics {
     }
     makeDimensionString(dimensions) {
         let result = [];
-        for (let [name, value] of Object.entries(dimensions)) {
+        let entries = Object.entries(dimensions).sort((a, b) => a[0].localeCompare(b[0]));
+        for (let [name, value] of entries) {
             result.push(`${name}=${value}`);
         }
         return result.join(',');
@@ -489,24 +492,17 @@ class CustomMetrics {
         point.sum += add.sum;
         point.count += add.count;
     }
-    async updateMetric(metric, point, ttl) {
-        if (this.source) {
-            metric._source = this.source;
-        }
-        if (ttl) {
-            metric.expires = (this.timestamp + ttl) * 1000;
-        }
-        await this.putMetric(metric);
-    }
     async getMetricList(namespace = undefined, metric = undefined, options = { limit: MetricListLimit }) {
         let map = {};
         let owner = options.owner || this.owner;
         let next;
         let limit = options.limit || MetricListLimit;
-        let items;
+        let chan = options.log == true ? 'info' : 'trace';
+        let items, command;
         do {
             ;
-            ({ items, next } = await this.findMetrics(owner, namespace, metric, limit, next));
+            ({ command, items, next } = await this.findMetrics(owner, namespace, metric, limit, next));
+            this.log[chan](`Find metrics ${namespace}, ${metric}`, { command, items });
             if (items.length) {
                 for (let item of items) {
                     let ns = (map[item.namespace] = map[item.namespace] || {});
@@ -603,9 +599,9 @@ class CustomMetrics {
         if (result.LastEvaluatedKey) {
             next = (0, util_dynamodb_1.unmarshall)(result.LastEvaluatedKey);
         }
-        return { items, next };
+        return { items, next, command };
     }
-    async putMetric(item) {
+    async putMetric(item, options) {
         let ConditionExpression, ExpressionAttributeValues;
         let seq;
         if (item.seq != undefined) {
@@ -628,8 +624,33 @@ class CustomMetrics {
             ExpressionAttributeValues,
         };
         let command = new client_dynamodb_1.PutItemCommand(params);
-        this.log.info(`@@@ PUT METRIC`, { command });
-        return await this.client.send(command);
+        let chan = options.log == true ? 'info' : 'trace';
+        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, { dimensions: item.dimensions, command });
+        try {
+            await this.client.send(command);
+            return true;
+        }
+        catch (err) {
+            ;
+            (function (err, log) {
+                let code = err.code || err.name;
+                if (code == 'ConditionalCheckFailedException') {
+                    log.trace(`Update collision`, { err });
+                }
+                else if (code == 'ProvisionedThroughputExceededException') {
+                    log.info(`Provisioned throughput exceeded: ${err.message}`, { err, cmd: command, item });
+                }
+                else {
+                    log.error(`Emit exception code ${err.name} ${err.code} message ${err.message}`, {
+                        err,
+                        cmd: command,
+                        item,
+                    });
+                    throw err;
+                }
+                return false;
+            })(err, this.log);
+        }
     }
     mapItemFromDB(data) {
         let pk = data[this.primaryKey];
@@ -644,13 +665,17 @@ class CustomMetrics {
                     period: s.sp,
                     samples: s.ss,
                     points: s.pt.map((p) => {
-                        return {
-                            count: p.c,
-                            max: p.x,
-                            min: p.m,
-                            pvalues: p.v,
-                            sum: p.s,
-                        };
+                        let point = { count: Number(p.c), sum: Number(p.s) };
+                        if (p.x != null) {
+                            point.max = Number(p.x);
+                        }
+                        if (p.m != null) {
+                            point.min = Number(p.m);
+                        }
+                        if (p.v) {
+                            point.pvalues = p.v;
+                        }
+                        return point;
                     }),
                 };
             });
@@ -660,29 +685,39 @@ class CustomMetrics {
         return { dimensions, expires, metric, namespace, owner, seq, spans };
     }
     mapItemToDB(item) {
-        return {
+        let result = {
             [this.primaryKey]: `${this.prefix}#${Version}#${item.owner}`,
             [this.sortKey]: `${this.prefix}#${item.namespace}#${item.metric}#${item.dimensions}`,
-            expires: Math.ceil(item.expires),
+            expires: item.expires,
             spans: item.spans.map((i) => {
                 return {
                     se: i.end,
                     sp: i.period,
                     ss: i.samples,
-                    pt: i.points.map((p) => {
-                        return {
-                            c: p.count,
-                            x: p.max,
-                            m: p.min,
-                            s: p.sum,
-                            v: p.pvalues,
-                        };
+                    pt: i.points.map((point) => {
+                        let p = { c: point.count, s: this.round(point.sum) };
+                        if (point.max != null) {
+                            p.x = this.round(point.max);
+                        }
+                        if (point.min != null) {
+                            p.m = this.round(point.min);
+                        }
+                        if (point.pvalues) {
+                            p.v = point.pvalues;
+                        }
+                        return p;
                     }),
                 };
             }),
             seq: item.seq,
             _source: item._source,
         };
+        for (let span of result.spans) {
+            for (let p of span.pt) {
+                this.assert(p.s != null && !isNaN(p.s));
+            }
+        }
+        return result;
     }
     static allocInstance(tags, options = {}) {
         let key = JSON.stringify(tags);
@@ -732,6 +767,83 @@ class CustomMetrics {
     error(message, context = {}) {
         console.log('ERROR: ' + message, context);
     }
-    nop() { }
+    trace(message, context = {}) {
+        console.log('TRACE: ' + message, context);
+    }
+    round(n) {
+        if (isNaN(n) || n == null) {
+            return 0;
+        }
+        let places = 16 - n.toFixed(0).length;
+        return Number(n.toFixed(places)) - 0;
+    }
+    jitter(msecs) {
+        return Math.min(10 * 1000, Math.floor(msecs / 2 + msecs * Math.random()));
+    }
+    async delay(time) {
+        return new Promise(function (resolve, reject) {
+            setTimeout(() => resolve(true), time);
+        });
+    }
 }
 exports.CustomMetrics = CustomMetrics;
+class Log {
+    constructor(dest) {
+        this.senselogs = null;
+        this.logger = null;
+        this.verbose = false;
+        if (dest === true) {
+            this.logger = this.defaultLogger;
+        }
+        else if (dest == 'verbose') {
+            this.logger = this.defaultLogger;
+            this.verbose = true;
+        }
+        else if (dest && typeof dest.info == 'function') {
+            this.senselogs = dest;
+        }
+    }
+    error(message, context) {
+        this.process('error', message, context);
+    }
+    info(message, context) {
+        this.process('info', message, context);
+    }
+    trace(message, context) {
+        this.process('trace', message, context);
+    }
+    process(chan, message, context) {
+        if (this.logger) {
+            this.logger(chan, message, context);
+        }
+        else if (this.senselogs) {
+            this.senselogs[chan](message, context);
+        }
+    }
+    defaultLogger(chan, message, context) {
+        if (chan == 'trace' && !this.verbose) {
+            return;
+        }
+        let tag = chan.toUpperCase();
+        if (context) {
+            try {
+                console.log(tag, message, JSON.stringify(context, null, 4));
+            }
+            catch (err) {
+                let buf = ['{'];
+                for (let [key, value] of Object.entries(context)) {
+                    try {
+                        buf.push(`    ${key}: ${JSON.stringify(value, null, 4)}`);
+                    }
+                    catch (err) {
+                    }
+                }
+                buf.push('}');
+                console.log(tag, message, buf.join('\n'));
+            }
+        }
+        else {
+            console.log(tag, message);
+        }
+    }
+}

@@ -1,4 +1,4 @@
-import { DynamoDBClient, DynamoDBClientConfig } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, DynamoDBClientConfig, QueryCommand } from '@aws-sdk/client-dynamodb';
 type SpanDef = {
     period: number;
     samples: number;
@@ -72,9 +72,8 @@ export type MetricOptions = {
     source?: string;
     spans?: SpanDef[];
     table?: string;
-    tableName?: string;
-    typeField?: string;
     ttl?: number;
+    tableName?: string;
 };
 export type MetricBufferOptions = {
     sum?: number;
@@ -84,6 +83,7 @@ export type MetricBufferOptions = {
 };
 export type MetricEmitOptions = {
     buffer?: MetricBufferOptions;
+    log?: boolean;
     owner?: string;
     timestamp?: number;
     ttl?: number;
@@ -96,6 +96,7 @@ export type MetricListOptions = {
 export type MetricQueryOptions = {
     accumulate?: boolean;
     id?: string;
+    log?: boolean;
     owner?: string;
     timestamp?: number;
 };
@@ -123,7 +124,7 @@ export declare class CustomMetrics {
     emit(namespace: string, metricName: string, value: number, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;
     private emitDimensions;
     private emitDimensionedMetric;
-    bufferMetric(namespace: string, metricName: string, value: number, dimensionsList: MetricDimensionsList, options: MetricEmitOptions): Promise<Metric>;
+    bufferMetric(namespace: string, metricName: string, point: Point, dimensions: string, options: MetricEmitOptions): Promise<Metric>;
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
     flush(): Promise<void>;
@@ -134,41 +135,29 @@ export declare class CustomMetrics {
     private makeDimensionObject;
     private addValue;
     private setPoint;
-    private updateMetric;
     getMetricList(namespace?: string, metric?: string, options?: MetricListOptions): Promise<MetricList>;
     private initMetric;
     getMetric(owner: string, namespace: string, metric: string, dimensions: string): Promise<Metric>;
     findMetrics(owner: string, namespace: string, metric: string | undefined, limit: number, startKey: object): Promise<{
         items: Metric[];
         next: object;
+        command: QueryCommand;
     }>;
-    putMetric(item: Metric): Promise<import("@aws-sdk/client-dynamodb").PutItemCommandOutput>;
+    putMetric(item: Metric, options: MetricEmitOptions): Promise<boolean>;
     mapItemFromDB(data: any): Metric;
     mapItemToDB(item: Metric): {
         [x: string]: string | number | {
             se: number;
             sp: number;
             ss: number;
-            pt: {
-                c: number;
-                x: number;
-                m: number;
-                s: number;
-                v: number[];
-            }[];
+            pt: any[];
         }[];
         expires: number;
         spans: {
             se: number;
             sp: number;
             ss: number;
-            pt: {
-                c: number;
-                x: number;
-                m: number;
-                s: number;
-                v: number[];
-            }[];
+            pt: any[];
         }[];
         seq: number;
         _source: string;
@@ -183,6 +172,9 @@ export declare class CustomMetrics {
     private assert;
     private info;
     private error;
-    private nop;
+    private trace;
+    round(n: number): number;
+    jitter(msecs: number): number;
+    delay(time: number): Promise<boolean>;
 }
 export {};

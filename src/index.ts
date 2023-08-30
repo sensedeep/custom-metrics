@@ -130,6 +130,7 @@ export type MetricBufferOptions = {
 
 export type MetricEmitOptions = {
     buffer?: MetricBufferOptions
+    log?: boolean
     owner?: string
     timestamp?: number
     ttl?: number
@@ -144,13 +145,14 @@ export type MetricListOptions = {
 export type MetricQueryOptions = {
     accumulate?: boolean
     id?: string
+    log?: boolean
     owner?: string
     timestamp?: number
 }
 
 type BufferElt = {
     count: number
-    dimensions: MetricDimensionsList
+    dimensions: string
     metric: string
     namespace: string
     sum: number
@@ -166,7 +168,7 @@ type InstanceMap = {
 var Instances: InstanceMap = {}
 
 /*
-    On exit, flush any buffered metrics
+    On exit, flush any buffered metrics. This requires any Lambda Layer to receive this signal
  */
 process.on(
     'SIGTERM',
@@ -183,7 +185,6 @@ export class CustomMetrics {
     private buffers: BufferMap = {}
     private client: DynamoDBClient
     private log: any
-    // private MetricModel: Model<Metric>
     private options: MetricOptions
     private owner: string
     private prefix: string = 'metric'
@@ -197,15 +198,7 @@ export class CustomMetrics {
     private ttl: number
 
     constructor(options: MetricOptions = {}) {
-        if (options.log == true) {
-            this.log = {info: this.nop, error: this.error}
-        } else if (options.log == 'verbose') {
-            this.log = {info: this.info, error: this.error}
-        } else if (options.log) {
-            this.log = options.log
-        } else {
-            this.log = {info: this.nop, error: this.nop}
-        }
+        this.log = new Log(options.log)
         if (options.ttl && typeof options.ttl != 'number') {
             throw new Error('Bad type for "ttl" option')
         }
@@ -276,15 +269,15 @@ export class CustomMetrics {
         if (!namespace || !metricName) {
             throw new Error('Missing emit namespace / metric argument')
         }
+        /* istanbul ignore next */
+        if (!Array.isArray(dimensionsList)) {
+            throw new Error('Dimensions must be an array')
+        }
         if (dimensionsList.length == 0) {
             dimensionsList = [{}]
         }
         this.timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
         let point: Point
-        let buffer = options.buffer || this.buffer
-        if (buffer && Buffering) {
-            return await this.bufferMetric(namespace, metricName, value, dimensionsList, options)
-        }
         point = {count: 1, sum: value}
         return await this.emitDimensions(namespace, metricName, point, dimensionsList, options)
     }
@@ -297,9 +290,14 @@ export class CustomMetrics {
         options: MetricEmitOptions
     ): Promise<Metric> {
         let result: Metric
-        for (let dimensions of dimensionsList) {
-            let dimString = this.makeDimensionString(dimensions)
-            result = await this.emitDimensionedMetric(namespace, metricName, point, dimString, options)
+        for (let dim of dimensionsList) {
+            let dimensions = this.makeDimensionString(dim)
+            let buffer = options.buffer || this.buffer
+            if (buffer && Buffering) {
+                result = await this.bufferMetric(namespace, metricName, point, dimensions, options)
+            } else {
+                result = await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options)
+            }
         }
         return result!
     }
@@ -320,11 +318,13 @@ export class CustomMetrics {
         let ttl = options.ttl != undefined ? options.ttl : this.ttl
         let retries = MaxRetries
         let metric: Metric | undefined
+        let backoff = 10
+        /* istanbul ignore next */
+        let chan = options.log == true ? 'info' : 'trace'
         do {
             let owner = options.owner || this.owner
             metric = await this.getMetric(owner, namespace, metricName, dimensions)
             if (!metric) {
-                this.log.info(`Initializing new metric`, {namespace, metricName, dimensions, owner})
                 metric = this.initMetric(owner, namespace, metricName, dimensions)
             }
             if (point.timestamp) {
@@ -352,41 +352,53 @@ export class CustomMetrics {
             if (ttl) {
                 metric.expires = this.timestamp + ttl
             }
-            if (await this.putMetric(metric)) {
+            if (await this.putMetric(metric, options)) {
                 break
             }
             /* istanbul ignore next */
             if (retries == 0) {
-                this.log.error(`Metric has too many retries`, {namespace, metricName, dimensions})
+                this.log.error(`Metric update has too many retries`, {namespace, metricName, dimensions})
                 break
             }
             /* istanbul ignore next */
-            /*
-            this.log.info(`Retry ${MaxRetries - retries} metric update ${metric.namespace} ${metric.metric} ${metric.dimensions}`, {
-                retries,
-                metric,
-            }) */
+            this.log[chan](
+                `Retry ${MaxRetries - retries} metric update ${metric.namespace} ${metric.metric} ${metric.dimensions}`,
+                {
+                    retries,
+                    metric,
+                }
+            )
+            //  Exponential backoff
+            /* istanbul ignore next */
+            backoff = backoff * 2
+            /* istanbul ignore next */
+            this.log[chan](`Retry backoff ${backoff} ${this.jitter(backoff)}`)
+            /* istanbul ignore next */
+            await this.delay(this.jitter(backoff))
         } while (retries-- > 0)
         return metric
     }
 
+    /*
+        Buffer a metric for specific dimensions
+     */
     async bufferMetric(
         namespace: string,
         metricName: string,
-        value: number,
-        dimensionsList: MetricDimensionsList,
+        point: Point,
+        dimensions: string,
         options: MetricEmitOptions
     ): Promise<Metric> {
         let buffer = options.buffer || this.buffer
         let interval = this.spans[0].period / this.spans[0].samples
-        let key = `${namespace}|${metricName}|${JSON.stringify(dimensionsList)}`
+        let key = `${namespace}|${metricName}|${JSON.stringify(dimensions)}`
         let elt: BufferElt = (this.buffers[key] = this.buffers[key] || {
             count: 0,
             sum: 0,
             timestamp: this.timestamp + (buffer.elapsed || interval),
             namespace: namespace,
             metric: metricName,
-            dimensions: dimensionsList,
+            dimensions,
         })
         if (
             buffer.force ||
@@ -394,24 +406,25 @@ export class CustomMetrics {
             (buffer.count && elt.count >= buffer.count) ||
             this.timestamp >= elt.timestamp
         ) {
-            //  Remove this trace soon
-            this.log.info(
-                `Emit buffered metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${
+            /* KEEP
+            this.log.trace(
+                `Emit buffered metric ${namespace}/${metricName} = ${point.sum}, sum ${elt.sum} count ${
                     elt.count
                 } remaining ${elt.timestamp - this.timestamp}`
-            )
-            let point = {count: elt.count, sum: elt.sum, timestamp: elt.timestamp}
-            await this.emitDimensions(namespace, metricName, point, dimensionsList, options)
+            ) */
+            point.timestamp = elt.timestamp
+            await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options)
         }
-        elt.count++
-        elt.sum += value
+        elt.count += point.count
+        elt.sum += point.sum
 
-        //  Remove this trace soon
-        this.log.info(
-            `Buffer metric ${namespace}/${metricName} = ${value}, sum ${elt.sum} count ${elt.count}, remaining ${
+        /* KEEP
+        this.log.trace(
+            `Buffer metric ${namespace}/${metricName} = sum ${elt.sum} count ${elt.count}, remaining ${
                 elt.timestamp - this.timestamp
-            }`
-        )
+            }`, {buffers: this.buffers}
+        ) */
+
         CustomMetrics.saveInstance({key}, this)
         return {
             spans: [{points: [{count: elt.count, sum: elt.sum}]}],
@@ -422,6 +435,9 @@ export class CustomMetrics {
         } as Metric
     }
 
+    /*
+        Flush metrics for all instances on Lambda termination
+     */
     static async terminate() {
         // let start = Date.now()
         await CustomMetrics.flushAll()
@@ -439,9 +455,7 @@ export class CustomMetrics {
     async flush() {
         for (let elt of Object.values(this.buffers)) {
             let point = {count: elt.count, sum: elt.sum}
-            for (let dimensions of elt.dimensions) {
-                await this.emitDimensionedMetric(elt.namespace, elt.metric, point, this.makeDimensionString(dimensions))
-            }
+            await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions)
         }
         this.buffers = {}
     }
@@ -459,7 +473,6 @@ export class CustomMetrics {
     ): Promise<MetricQueryResult> {
         this.timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
 
-        this.log.info(`Query metrics ${namespace}/${metricName}`, {dimensions})
         let owner = options.owner || this.owner
 
         /*
@@ -475,7 +488,7 @@ export class CustomMetrics {
 
         let metric = await this.getMetric(owner, namespace, metricName, dimString)
         if (!metric) {
-            return {dimensions, metric: metricName, namespace, period, points: [], owner, samples: 0}
+            return {dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
         /*
             Map the period to the closest span that has a period equal or larger.
@@ -506,6 +519,14 @@ export class CustomMetrics {
             result = {dimensions, metric: metricName, namespace, period, points: [], owner, samples: span.samples}
         }
         result.id = options.id
+        /* istanbul ignore next */
+        this.log[options.log == true ? 'info' : 'trace'](`Query metrics ${namespace}, ${metricName}`, {
+            dimensions,
+            period,
+            statistic,
+            options,
+            result,
+        })
         return result
     }
 
@@ -645,11 +666,13 @@ export class CustomMetrics {
     }
 
     /*
-        Convert a dimensions object of the form {key: value, ...} to a string with comma separated "key=value,..."
+        Convert a dimensions object of the form {key: value, ...} to a string with comma separated "key=value,..." with sorted property keys
      */
     private makeDimensionString(dimensions: MetricDimensions): string {
         let result: string[] = []
-        for (let [name, value] of Object.entries(dimensions)) {
+        //  Sort dimension properties
+        let entries = Object.entries(dimensions).sort((a, b) => a[0].localeCompare(b[0]))
+        for (let [name, value] of entries) {
             result.push(`${name}=${value}`)
         }
         return result.join(',')
@@ -684,6 +707,7 @@ export class CustomMetrics {
         this.assert(metric)
         this.assert(timestamp)
         this.assert(0 <= si && si < metric.spans.length)
+
         let span = metric.spans[si]
         let interval = span.period / span.samples
         /* istanbul ignore next */
@@ -812,10 +836,13 @@ export class CustomMetrics {
         let owner = options.owner || this.owner
         let next: object | undefined
         let limit = options.limit || MetricListLimit
-        let items
+        /* istanbul ignore next */
+        let chan = options.log == true ? 'info' : 'trace'
+        let items, command
         do {
             /* istanbul ignore next */
-            ;({items, next} = await this.findMetrics(owner, namespace, metric, limit, next))
+            ;({command, items, next} = await this.findMetrics(owner, namespace, metric, limit, next))
+            this.log[chan](`Find metrics ${namespace}, ${metric}`, {command, items})
             if (items.length) {
                 for (let item of items) {
                     let ns = (map[item.namespace] = map[item.namespace] || {})
@@ -887,7 +914,7 @@ export class CustomMetrics {
         metric: string | undefined,
         limit: number,
         startKey: object
-    ): Promise<{items: Metric[]; next: object}> {
+    ): Promise<{items: Metric[]; next: object; command: QueryCommand}> {
         let key = [namespace]
         if (metric) {
             key.push(metric)
@@ -912,7 +939,9 @@ export class CustomMetrics {
             ExclusiveStartKey: start,
             ProjectionExpression: `${this.primaryKey}, ${this.sortKey}`,
         })
+
         let result = await this.client.send(command)
+
         let items = []
         if (result.Items) {
             for (let i = 0; i < result.Items.length; i++) {
@@ -925,14 +954,14 @@ export class CustomMetrics {
         if (result.LastEvaluatedKey) {
             next = unmarshall(result.LastEvaluatedKey)
         }
-        return {items, next}
+        return {items, next, command}
     }
 
     /*
         Use a sequence number to detect simultaneous updated. If collision, will throw 
         a ConditionalCheckFailedException and emit() will then retry.
     */
-    async putMetric(item: Metric) {
+    async putMetric(item: Metric, options: MetricEmitOptions) {
         let ConditionExpression, ExpressionAttributeValues
         let seq: number
         if (item.seq != undefined) {
@@ -956,23 +985,33 @@ export class CustomMetrics {
             ExpressionAttributeValues,
         }
         let command = new PutItemCommand(params)
+
+        /* istanbul ignore next */
+        let chan = options.log == true ? 'info' : 'trace'
+        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, {dimensions: item.dimensions, command})
+
         try {
             await this.client.send(command)
             return true
         } catch (err) {
-            /* istanbul ignore next */ 
-            (function(err) {
+            /* istanbul ignore next */ ;(function (err, log) {
+                /* istanbul ignore next */
                 //  SDK V3 puts the code in err.name (Ugh!)
                 let code = err.code || err.name
                 if (code == 'ConditionalCheckFailedException') {
+                    log.trace(`Update collision`, {err})
                 } else if (code == 'ProvisionedThroughputExceededException') {
-                    this.log.info(`Provisioned throughput exceeded: ${err.message}`, {err, cmd: command, item})
+                    log.info(`Provisioned throughput exceeded: ${err.message}`, {err, cmd: command, item})
                 } else {
-                    this.log.info(`Emit exception code ${err.name} ${err.code} message ${err.message}`, {err, cmd: command, item})
+                    log.error(`Emit exception code ${err.name} ${err.code} message ${err.message}`, {
+                        err,
+                        cmd: command,
+                        item,
+                    })
                     throw err
                 }
                 return false
-            })(err)
+            })(err, this.log)
         }
     }
 
@@ -1111,15 +1150,95 @@ export class CustomMetrics {
         console.log('ERROR: ' + message, context)
     }
 
+    /* istanbul ignore next */
+    private trace(message: string, context = {}) {
+        console.log('TRACE: ' + message, context)
+    }
+
     //  Overcome Javascript number precision issues
-    round(n) {
+    round(n: number): number {
         /* istanbul ignore next */
         if (isNaN(n) || n == null) {
             return 0
         }
-        return n.toFixed(16 - n.toFixed(0).length) - 0
+        let places = 16 - n.toFixed(0).length
+        return Number(n.toFixed(places)) - 0
     }
 
     /* istanbul ignore next */
-    private nop() {}
+    jitter(msecs: number): number {
+        return Math.min(10 * 1000, Math.floor(msecs / 2 + msecs * Math.random()))
+    }
+
+    /* istanbul ignore next */
+    async delay(time: number): Promise<boolean> {
+        return new Promise(function (resolve, reject) {
+            setTimeout(() => resolve(true), time)
+        })
+    }
+}
+
+//  Emulate the SenseLogs logger
+/* istanbul ignore next */
+class Log {
+    private senselogs = null
+    private logger = null
+    private verbose = false
+    constructor(dest: boolean | any) {
+        if (dest === true) {
+            this.logger = this.defaultLogger
+        } else if (dest == 'verbose') {
+            this.logger = this.defaultLogger
+            this.verbose = true
+        } else if (dest && typeof dest.info == 'function') {
+            this.senselogs = dest
+        }
+    }
+
+    error(message: string, context: string) {
+        this.process('error', message, context)
+    }
+
+    info(message: string, context: string) {
+        this.process('info', message, context)
+    }
+
+    trace(message: string, context: string) {
+        this.process('trace', message, context)
+    }
+
+    process(chan: string, message: string, context: string) {
+        if (this.logger) {
+            this.logger(chan, message, context)
+        } else if (this.senselogs) {
+            this.senselogs[chan](message, context)
+        }
+    }
+
+    /* istanbul ignore next */
+    defaultLogger(chan: string, message: string, context: object) {
+        if (chan == 'trace' && !this.verbose) {
+            //  params.log: true will cause the chan to be changed to 'info'
+            return
+        }
+        let tag = chan.toUpperCase()
+        if (context) {
+            try {
+                console.log(tag, message, JSON.stringify(context, null, 4))
+            } catch (err) {
+                let buf = ['{']
+                for (let [key, value] of Object.entries(context)) {
+                    try {
+                        buf.push(`    ${key}: ${JSON.stringify(value, null, 4)}`)
+                    } catch (err) {
+                        /* continue */
+                    }
+                }
+                buf.push('}')
+                console.log(tag, message, buf.join('\n'))
+            }
+        } else {
+            console.log(tag, message)
+        }
+    }
 }
