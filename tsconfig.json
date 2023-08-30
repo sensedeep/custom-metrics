@@ -2,7 +2,7 @@
     "extends": "./tsconfig-base.json",
     "compilerOptions": {
         "lib": ["esnext"],
-        "module": "esnext",
+        "module": "nodenext",
         "outDir": "dist/mjs",
         "target": "esnext"
     }

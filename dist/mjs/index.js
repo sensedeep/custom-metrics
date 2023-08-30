@@ -1,6 +1,12 @@
-import process from 'process';
-import { DynamoDBClient, GetItemCommand, PutItemCommand, QueryCommand, } from '@aws-sdk/client-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.CustomMetrics = exports.DefaultSpans = void 0;
+const process_1 = __importDefault(require("process"));
+const client_dynamodb_1 = require("@aws-sdk/client-dynamodb");
+const util_dynamodb_1 = require("@aws-sdk/util-dynamodb");
 const Version = 1;
 const Assert = true;
 const Buffering = true;
@@ -8,7 +14,7 @@ const DefaultResolution = 0;
 const MaxSeq = Number.MAX_SAFE_INTEGER;
 const MaxRetries = 10;
 const MetricListLimit = 10000;
-export const DefaultSpans = [
+exports.DefaultSpans = [
     { period: 5 * 60, samples: 10 },
     { period: 60 * 60, samples: 12 },
     { period: 24 * 60 * 60, samples: 12 },
@@ -17,10 +23,10 @@ export const DefaultSpans = [
     { period: 365 * 24 * 60 * 60, samples: 12 },
 ];
 var Instances = {};
-process.on('SIGTERM', async () => {
+process_1.default.on('SIGTERM', async () => {
     await CustomMetrics.terminate();
 });
-export class CustomMetrics {
+class CustomMetrics {
     consistent = false;
     buffer;
     buffers = {};
@@ -69,15 +75,15 @@ export class CustomMetrics {
             this.client = options.client;
         }
         else {
-            this.client = new DynamoDBClient(options.creds || {});
+            this.client = new client_dynamodb_1.DynamoDBClient(options.creds || {});
         }
         if (!options.table && !options.tableName) {
             throw new Error('Missing DynamoDB table name property');
         }
         this.table = options.table || options.tableName;
         this.options = options;
-        this.owner = options.owner || 'account';
-        this.spans = options.spans || DefaultSpans;
+        this.owner = options.owner || 'default';
+        this.spans = options.spans || exports.DefaultSpans;
         this.ttl = options.ttl || this.spans[this.spans.length - 1].period;
         if (options.consistent != null) {
             this.consistent = options.consistent;
@@ -556,7 +562,7 @@ export class CustomMetrics {
         return metric;
     }
     async getMetric(owner, namespace, metric, dimensions) {
-        let command = new GetItemCommand({
+        let command = new client_dynamodb_1.GetItemCommand({
             TableName: this.table,
             Key: {
                 [this.primaryKey]: { S: `${this.prefix}#${Version}#${owner}` },
@@ -566,7 +572,7 @@ export class CustomMetrics {
         });
         let data = await this.client.send(command);
         if (data.Item) {
-            let item = unmarshall(data.Item);
+            let item = (0, util_dynamodb_1.unmarshall)(data.Item);
             return this.mapItemFromDB(item);
         }
         return null;
@@ -576,8 +582,8 @@ export class CustomMetrics {
         if (metric) {
             key.push(metric);
         }
-        let start = startKey ? marshall(startKey) : undefined;
-        let command = new QueryCommand({
+        let start = startKey ? (0, util_dynamodb_1.marshall)(startKey) : undefined;
+        let command = new client_dynamodb_1.QueryCommand({
             TableName: this.table,
             ExpressionAttributeNames: {
                 '#_0': this.primaryKey,
@@ -598,13 +604,13 @@ export class CustomMetrics {
         let items = [];
         if (result.Items) {
             for (let i = 0; i < result.Items.length; i++) {
-                let item = unmarshall(result.Items[i]);
+                let item = (0, util_dynamodb_1.unmarshall)(result.Items[i]);
                 items.push(this.mapItemFromDB(item));
             }
         }
         let next = undefined;
         if (result.LastEvaluatedKey) {
-            next = unmarshall(result.LastEvaluatedKey);
+            next = (0, util_dynamodb_1.unmarshall)(result.LastEvaluatedKey);
         }
         return { items, next, command };
     }
@@ -626,11 +632,11 @@ export class CustomMetrics {
         let params = {
             TableName: this.table,
             ReturnValues: 'NONE',
-            Item: marshall(mapped, { removeUndefinedValues: true }),
+            Item: (0, util_dynamodb_1.marshall)(mapped, { removeUndefinedValues: true }),
             ConditionExpression,
             ExpressionAttributeValues,
         };
-        let command = new PutItemCommand(params);
+        let command = new client_dynamodb_1.PutItemCommand(params);
         let chan = options.log == true ? 'info' : 'trace';
         this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, { dimensions: item.dimensions, command });
         try {
@@ -793,6 +799,7 @@ export class CustomMetrics {
         });
     }
 }
+exports.CustomMetrics = CustomMetrics;
 class Log {
     senselogs = null;
     logger = null;

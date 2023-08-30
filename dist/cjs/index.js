@@ -69,7 +69,7 @@ class CustomMetrics {
         }
         this.table = options.table || options.tableName;
         this.options = options;
-        this.owner = options.owner || 'account';
+        this.owner = options.owner || 'default';
         this.spans = options.spans || exports.DefaultSpans;
         this.ttl = options.ttl || this.spans[this.spans.length - 1].period;
         if (options.consistent != null) {
