@@ -180,7 +180,7 @@ This will return a list of dimensions in **list.dimensions**.
 
 You can scope metrics by chosing unique namespaces for different applications or services, or by using various dimensions for applications/services. This is the preferred design pattern.
 
-You can also scope metrics by selecting a unique `owner` property via the CustomMetrics constructor. This property is used, in the primary key of metric items. This owner defaults to **'account'**.
+You can also scope metrics by selecting a unique `owner` property via the CustomMetrics constructor. This property is used, in the primary key of metric items. This owner defaults to **'default'**.
 
 ```javascript
 const cartMetrics = new CustomMetrics({
