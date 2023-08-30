@@ -239,7 +239,7 @@ export class CustomMetrics {
         this.table = options.table || options.tableName
 
         this.options = options
-        this.owner = options.owner || 'account'
+        this.owner = options.owner || 'default'
         this.spans = options.spans || DefaultSpans
         this.ttl = options.ttl || this.spans[this.spans.length - 1].period
 
@@ -1240,4 +1240,31 @@ class Log {
             console.log(tag, message)
         }
     }
+
+    /* KEEP
+    Fill a query result with zero data points for all missing points
+
+    function fill(metrics) {
+        for (let metric of metrics) {
+            let nextTime = metric.start.getTime()
+            let end = metric.end.getTime()
+            let interval = (metric.period / metric.samples) * 1000
+            let points = []
+            for (let point of metric.points) {
+                while (nextTime + interval < point.timestamp) {
+                    nextTime += interval
+                    points.push({timestamp: nextTime, value: 0, count: 0})
+                }
+                points.push(point)
+                nextTime = point.timestamp
+            }
+            nextTime += interval
+
+            while (nextTime < end) {
+                points.push({timestamp: nextTime, value: 0, count: 0})
+                nextTime += interval
+            }
+            metric.points = points
+        }
+    } */
 }
