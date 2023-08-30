@@ -5,8 +5,8 @@ import {client, table, CustomMetrics, log, dump} from './utils/init'
 
 jest.setTimeout(7200 * 1000)
 
-test('Constructor with OneTable', async () => {
-    let metrics = new CustomMetrics({client, table})
+test('Basic test harness', async () => {
+    let metrics = new CustomMetrics({client, table, log: true})
     let timestamp = new Date(2000, 0, 1).getTime()
 
     //  This first emit will initialize the metric
