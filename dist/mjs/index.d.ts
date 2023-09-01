@@ -1,4 +1,4 @@
-import { DynamoDBClient, DynamoDBClientConfig, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 type SpanDef = {
     period: number;
     samples: number;
@@ -62,13 +62,14 @@ export type MetricOptions = {
     buffer?: MetricBufferOptions;
     client?: DynamoDBClient;
     consistent?: boolean;
-    creds?: DynamoDBClientConfig;
+    creds?: object;
     log?: true | 'verbose' | any;
     owner?: string;
     primaryKey?: string;
     sortKey?: string;
     prefix?: string;
     pResolution?: number;
+    region?: string;
     source?: string;
     spans?: SpanDef[];
     table?: string;

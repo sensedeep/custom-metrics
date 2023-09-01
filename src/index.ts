@@ -106,13 +106,14 @@ export type MetricOptions = {
     buffer?: MetricBufferOptions
     client?: DynamoDBClient
     consistent?: boolean
-    creds?: DynamoDBClientConfig
+    creds?: object
     log?: true | 'verbose' | any
     owner?: string
     primaryKey?: string
     sortKey?: string
     prefix?: string
     pResolution?: number
+    region?: string
     source?: string
     spans?: SpanDef[]
     table?: string
@@ -226,10 +227,20 @@ export class CustomMetrics {
         this.primaryKey = options.primaryKey || 'pk'
         this.sortKey = options.sortKey || 'sk'
 
+        /* istanbul ignore else */
         if (options.client) {
             this.client = options.client
-        } else {
-            this.client = new DynamoDBClient(options.creds || {})
+        } else if (options.creds) {
+            //  Undocumented 
+            /* istanbul ignore next */
+            let credentials = options.creds as any
+            let params: DynamoDBClientConfig = {
+                credentials,
+                region: credentials.region || options.region,
+            }
+            this.log.info(`@@ METRICS Constructor params`, {params})
+            /* istanbul ignore next */
+            this.client = new DynamoDBClient(params)
         }
         if (!options.table && !options.tableName) {
             throw new Error('Missing DynamoDB table name property')

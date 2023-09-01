@@ -61,8 +61,14 @@ class CustomMetrics {
         if (options.client) {
             this.client = options.client;
         }
-        else {
-            this.client = new client_dynamodb_1.DynamoDBClient(options.creds || {});
+        else if (options.creds) {
+            let credentials = options.creds;
+            let params = {
+                credentials,
+                region: credentials.region || options.region,
+            };
+            this.log.info(`@@ METRICS Constructor params`, { params });
+            this.client = new client_dynamodb_1.DynamoDBClient(params);
         }
         if (!options.table && !options.tableName) {
             throw new Error('Missing DynamoDB table name property');
