@@ -1,7 +1,7 @@
 {
     "name": "custom-metrics",
     "version": "0.7.6",
-    "description": "Low cost custom metrics for AWS",
+    "description": "Custom metrics for AWS",
     "main": "dist/cjs/index.js",
     "module": "dist/mjs/index.js",
     "types": "dist/mjs/index.d.ts",
