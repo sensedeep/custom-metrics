@@ -138,9 +138,8 @@ This will return data like this:
         "samples": 10,
         "points": [
             { "sum": 24000, "count": 19, "min": 1000, "max": 5000 },
-            ...
         ]
-    ]
+    }]
 }
 ```
 
@@ -200,17 +199,20 @@ If you are updating metrics extremely frequently, CustomMetrics can impose a mea
 
 CustomMetrics are stored in a DynamoDB table using the following single-table schema. 
 
-| Field | Attribute | Encoding | Notes
-|-|-|
-primaryKey | primaryKey | ${prefix}#${version}#${owner} | 
-sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions} |
-expires | expires | number | Time in seconds when for DynamoDB auto removal
-spans | spans | string | Array of time spans
+The metric namespace, metric name and dimensions are encoded in the sort key to minimize space. The primary key encodes the metric owner to support multi-tenant security of items.
+
+| Field | Attribute | Encoding | Notes |
+| - | - | - | - |
+| primaryKey | primaryKey | ${prefix}#${version}#${owner} |
+| sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions} |
+| expires | expires | number | Time in seconds when for DynamoDB auto removal |
+| spans | spans | string | Array of time spans |
+
 
 The metric spans are encoded as:
 
-| Field | Attribute | Encoding | Notes
-|-|-|
+| Field | Attribute | Encoding | Notes |
+| - | - | - | - |
 end | se | number | Time in seconds of the end of the last point in the span
 period | sp | number | Span period in seconds
 samples | ss | number | Number of data points in the span
@@ -218,13 +220,38 @@ points | pt | array | Data points
 
 The span points are encoded as:
 
-| Field | Attribute | Encoding | Notes
-|-|-|
+| Field | Attribute | Encoding | Notes |
+| - | - | - | - |
 count | c | number | Count of the values in sum
 sum | s | number | Sum of values
 max | x | number | Maximum value seen
 min | m | number | Minimum value seen
 pvalues | v | array | P values
+
+Here is what a metric item looks like:
+
+```javascript
+{
+    pk: `metric#${version}#${owner}`,
+    sk: `metric#${namespace}#${metric}#${dimensions}`,
+    expires: Number,        // Time in seconds since Jan 1, 1970 when the item expires
+    spans: [
+        {
+            se: Number,     // Span End -- Time in seconds for the end of this span
+            sp: Number,     // Span Period -- Time span period in seconds
+            ss: Number,     // Span Samples -- Number of points in this span
+            pt: [
+                c: Number,  // Count of data measurments in this data point
+                x: Number,  // Maximum value in this point
+                m: Number,  // Minimum value in this point
+                s: Number,  // Sum of values in this point (Divide by c for average)
+            ]
+        }, ...
+    ],
+    seq: Number,            // Update sequence number for update collision detection
+    _type: "Metric"         // Item type for Single Table design patterns
+}
+```
 
 ### CustomMetrics Class API
 
@@ -258,7 +285,7 @@ The `options` parameter is of type `object` with the following properties:
 | pResolution | `number` | Number of values to store to compute P value statistics. Defaults to zero.
 | source | `string` | Reserved
 | spans | `array` | Array of span definitions. See below.
-| tableName | `string` | Name of the DynamoDB table to use. (Required)
+| table | `string` | Name of the DynamoDB table to use. (Required)
 | ttl | `number` | Maximum lifespan of the metrics in seconds.
 | type | `{[type]: "Model"}` | Define a type field in metric items for single table designs. Defaults to {_type: 'Metric'}
 
@@ -432,33 +459,6 @@ type MetricList = {
 
 The list of namespaces will always be returned. If a namespace argument is provided, the list of metrics in that namespace will be returned. If a metric argument is provided, the list of dimensions for that metric will be returned.
 
-## Metric Items
-
-Metric items are stored in the database using the following metric item schema.
-The metric namespace, metric name and dimensions are encoded in the sort key to minimize space. The primary key encodes the metric owner to support multi-tenant security of items.
-
-```javascript
-{
-    pk: `metric#${version}#${owner}`,
-    sk: `metric#${namespace}#${metric}#${dimensions}`,
-    expires: Number,        // Time in seconds since Jan 1, 1970 when the item expires
-    spans: [
-        {
-            se: Number,     // Span End -- Time in seconds for the end of this span
-            sp: Number,     // Span Period -- Time span period in seconds
-            ss: Number,     // Span Samples -- Number of points in this span
-            pt: [
-                c: Number,  // Count of data measurments in this data point
-                x: Number,  // Maximum value in this point
-                m: Number,  // Minimum value in this point
-                s: Number,  // Sum of values in this point (Divide by c for average)
-            ]
-        }, ...
-    ],
-    seq: Number,            // Update sequence number for update collision detection
-    _type: "Metric"         // Item type for Single Table design patterns
-}
-```
 
 ### References
 
