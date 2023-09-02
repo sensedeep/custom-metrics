@@ -1,5 +1,7 @@
 /*
     cache.ts - CustomMetrics instance cache
+
+    UNDOCUMENTED AND DEPRECATED
  */
 import {client, table, CustomMetrics} from './utils/init'
 

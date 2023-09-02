@@ -118,6 +118,7 @@ export type MetricOptions = {
     spans?: SpanDef[]
     table?: string
     ttl?: number
+    type?: {[key: string]: string} // Optional single type type field
     // DEPRECATE
     tableName?: string
 }
@@ -196,6 +197,7 @@ export class CustomMetrics {
     private spans: SpanDef[]
     private table: string
     private timestamp: number
+    private type: {[key: string]: string}
     private ttl: number
 
     constructor(options: MetricOptions = {}) {
@@ -226,6 +228,7 @@ export class CustomMetrics {
         }
         this.primaryKey = options.primaryKey || 'pk'
         this.sortKey = options.sortKey || 'sk'
+        this.type = options.type || {_type: 'Metric'}
 
         /* istanbul ignore else */
         if (options.client) {
@@ -238,7 +241,6 @@ export class CustomMetrics {
                 credentials,
                 region: credentials.region || options.region,
             }
-            this.log.info(`@@ METRICS Constructor params`, {params})
             /* istanbul ignore next */
             this.client = new DynamoDBClient(params)
         }
@@ -1086,6 +1088,11 @@ export class CustomMetrics {
             seq: item.seq,
             _source: item._source,
         }
+        if (this.type) {
+            let [key, model] = Object.entries(this.type)[0]
+            result[key] = model
+        }
+        // TODO REMOVE assert
         for (let span of result.spans) {
             for (let p of span.pt) {
                 this.assert(p.s != null && !isNaN(p.s))
@@ -1095,6 +1102,7 @@ export class CustomMetrics {
     }
 
     /*
+        UNDOCUMENTED DEPRECATED
         Allocate a CustomMetrics instance from the cache
      */
     static allocInstance(tags: object, options: MetricOptions = {}) {

@@ -260,6 +260,7 @@ The `options` parameter is of type `object` with the following properties:
 | spans | `array` | Array of span definitions. See below.
 | tableName | `string` | Name of the DynamoDB table to use. (Required)
 | ttl | `number` | Maximum lifespan of the metrics in seconds.
+| type | `{[type]: "Model"}` | Define a type field in metric items for single table designs. Defaults to {_type: 'Metric'}
 
 For example:
 
@@ -430,6 +431,34 @@ type MetricList = {
 ```
 
 The list of namespaces will always be returned. If a namespace argument is provided, the list of metrics in that namespace will be returned. If a metric argument is provided, the list of dimensions for that metric will be returned.
+
+## Metric Items
+
+Metric items are stored in the database using the following metric item schema.
+The metric namespace, metric name and dimensions are encoded in the sort key to minimize space. The primary key encodes the metric owner to support multi-tenant security of items.
+
+```javascript
+{
+    pk: `metric#${version}#${owner}`,
+    sk: `metric#${namespace}#${metric}#${dimensions}`,
+    expires: Number,        // Time in seconds since Jan 1, 1970 when the item expires
+    spans: [
+        {
+            se: Number,     // Span End -- Time in seconds for the end of this span
+            sp: Number,     // Span Period -- Time span period in seconds
+            ss: Number,     // Span Samples -- Number of points in this span
+            pt: [
+                c: Number,  // Count of data measurments in this data point
+                x: Number,  // Maximum value in this point
+                m: Number,  // Minimum value in this point
+                s: Number,  // Sum of values in this point (Divide by c for average)
+            ]
+        }, ...
+    ],
+    seq: Number,            // Update sequence number for update collision detection
+    _type: "Metric"         // Item type for Single Table design patterns
+}
+```
 
 ### References
 
