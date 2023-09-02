@@ -287,7 +287,7 @@ The `options` parameter is of type `object` with the following properties:
 | spans | `array` | Array of span definitions. See below.
 | table | `string` | Name of the DynamoDB table to use. (Required)
 | ttl | `number` | Maximum lifespan of the metrics in seconds.
-| type | `{[type]: "Model"}` | Define a type field in metric items for single table designs. Defaults to {_type: 'Metric'}
+| type | `{[type]: "Model"}` | Define a type field in metric items for single table designs. Defaults to {_type: 'Metric'}.
 
 For example:
 
