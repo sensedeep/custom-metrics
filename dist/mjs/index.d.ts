@@ -74,6 +74,9 @@ export type MetricOptions = {
     spans?: SpanDef[];
     table?: string;
     ttl?: number;
+    type?: {
+        [key: string]: string;
+    };
     tableName?: string;
 };
 export type MetricBufferOptions = {
@@ -120,6 +123,7 @@ export declare class CustomMetrics {
     private spans;
     private table;
     private timestamp;
+    private type;
     private ttl;
     constructor(options?: MetricOptions);
     emit(namespace: string, metricName: string, value: number, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;

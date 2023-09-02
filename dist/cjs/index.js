@@ -58,6 +58,7 @@ class CustomMetrics {
         }
         this.primaryKey = options.primaryKey || 'pk';
         this.sortKey = options.sortKey || 'sk';
+        this.type = options.type || { _type: 'Metric' };
         if (options.client) {
             this.client = options.client;
         }
@@ -67,7 +68,6 @@ class CustomMetrics {
                 credentials,
                 region: credentials.region || options.region,
             };
-            this.log.info(`@@ METRICS Constructor params`, { params });
             this.client = new client_dynamodb_1.DynamoDBClient(params);
         }
         if (!options.table && !options.tableName) {
@@ -718,6 +718,10 @@ class CustomMetrics {
             seq: item.seq,
             _source: item._source,
         };
+        if (this.type) {
+            let [key, model] = Object.entries(this.type)[0];
+            result[key] = model;
+        }
         for (let span of result.spans) {
             for (let p of span.pt) {
                 this.assert(p.s != null && !isNaN(p.s));
