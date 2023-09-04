@@ -233,15 +233,15 @@ export class CustomMetrics {
         /* istanbul ignore else */
         if (options.client) {
             this.client = options.client
-        } else if (options.creds) {
-            //  Undocumented 
-            /* istanbul ignore next */
-            let credentials = options.creds as any
-            let params: DynamoDBClientConfig = {
-                credentials,
-                region: credentials.region || options.region,
+        } else {
+            let params: DynamoDBClientConfig = {}
+            if (options.creds) {
+                params.credentials = options.creds as any
             }
-            /* istanbul ignore next */
+            if (options.region) {
+                //  Allow region in credentials
+                params.region = (params.credentials as any).region || options.region
+            }
             this.client = new DynamoDBClient(params)
         }
         if (!options.table && !options.tableName) {

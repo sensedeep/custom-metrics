@@ -276,14 +276,16 @@ The `options` parameter is of type `object` with the following properties:
 | Property | Type | Description | 
 | -------- | :--: |------------ |
 | buffer | `object` | Buffer metric emits. Has properties: {count, elapsed, sum}
-| client | `object` | AWS DynamoDB client instance. Optional.
+| client | `object` | AWS DynamoDB client instance. Optional. If not specified, a client is created using the `table`, `creds` and `region` options.
+| creds | `object` | AWS credentials to use when accessing the table.
 | log | `boolean | object` | Set to true for default logging or provide a logging object with methods for 'info', 'error' and 'trace'. Default to null.
 | owner | `string` | Unique owner of the metrics. This is used to compute the primary key for the metric data item.
 | primaryKey | `string` | Name of the DynamoDB table primary key attribute. Defaults to 'pk'.
 | sortKey | `string` | Name of the DynamoDB table sort key attribute. Defaults to 'sk'.
 | prefix | `string` | Primary and sort key prefix to use. Defaults to 'metric#'.
 | pResolution | `number` | Number of values to store to compute P value statistics. Defaults to zero.
-| source | `string` | Reserved
+| region | `string` | AWS region containing the table. Required if not the current region. Defaults to null.
+| source | `string` | Reserved.
 | spans | `array` | Array of span definitions. See below.
 | table | `string` | Name of the DynamoDB table to use. (Required)
 | ttl | `number` | Maximum lifespan of the metrics in seconds.
