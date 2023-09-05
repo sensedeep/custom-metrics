@@ -70,12 +70,14 @@ export class CustomMetrics {
         if (options.client) {
             this.client = options.client;
         }
-        else if (options.creds) {
-            let credentials = options.creds;
-            let params = {
-                credentials,
-                region: credentials.region || options.region,
-            };
+        else {
+            let params = {};
+            if (options.creds) {
+                params.credentials = options.creds;
+            }
+            if (options.region) {
+                params.region = params.credentials.region || options.region;
+            }
             this.client = new DynamoDBClient(params);
         }
         if (!options.table && !options.tableName) {
