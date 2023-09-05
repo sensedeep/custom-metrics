@@ -11,8 +11,6 @@
 
 CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps.
 
->CustomMetrics is under active development and is not (yet) ready for production use. This README documentation is incomplete. All feedback is welcome.
-
 ## Background
 
 AWS CloudWatch offers metrics to monitor specific aspects of your apps that are not covered by the default AWS infrastructure metrics. 

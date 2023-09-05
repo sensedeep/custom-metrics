@@ -419,24 +419,11 @@ export class CustomMetrics {
             (buffer.count && elt.count >= buffer.count) ||
             this.timestamp >= elt.timestamp
         ) {
-            /* KEEP
-            this.log.trace(
-                `Emit buffered metric ${namespace}/${metricName} = ${point.sum}, sum ${elt.sum} count ${
-                    elt.count
-                } remaining ${elt.timestamp - this.timestamp}`
-            ) */
             point.timestamp = elt.timestamp
             await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options)
         }
         elt.count += point.count
         elt.sum += point.sum
-
-        /* KEEP
-        this.log.trace(
-            `Buffer metric ${namespace}/${metricName} = sum ${elt.sum} count ${elt.count}, remaining ${
-                elt.timestamp - this.timestamp
-            }`, {buffers: this.buffers}
-        ) */
 
         CustomMetrics.saveInstance({key}, this)
         return {
@@ -1102,9 +1089,9 @@ export class CustomMetrics {
     }
 
     /*
-        UNDOCUMENTED DEPRECATED
         Allocate a CustomMetrics instance from the cache
      */
+    //REMOVE
     static allocInstance(tags: object, options: MetricOptions = {}) {
         let key = JSON.stringify(tags)
         let metrics = Instances[key]
@@ -1114,6 +1101,7 @@ export class CustomMetrics {
         return metrics
     }
 
+    //REMOVE
     static freeInstance(tags: object) {
         let key = JSON.stringify(tags)
         delete Instances[key]
@@ -1123,6 +1111,7 @@ export class CustomMetrics {
         delete Instances[key]
     }
 
+    //REMOVE
     static getInstance(tags: object) {
         let key = JSON.stringify(tags)
         return Instances[key]
@@ -1133,6 +1122,7 @@ export class CustomMetrics {
         Instances[key] = metrics
     }
 
+    //REMOVE
     static getCache() {
         return Instances
     }
