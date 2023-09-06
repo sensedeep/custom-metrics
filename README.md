@@ -289,7 +289,7 @@ The `options` parameter is of type `object` with the following properties:
 | -------- | :--: |------------ |
 | buffer | `object` | Buffer metric emits. Has properties: {count, elapsed, sum}
 | client | `object` | AWS DynamoDB client instance. Optional. If not specified, a client is created using the `table`, `creds` and `region` options.
-| creds | `object` | AWS credentials to use when accessing the table.
+| creds | `object` | AWS credentials to use when accessing the table. Not required if client supplied.
 | log | `boolean | object` | Set to true for default logging or provide a logging object with methods for 'info', 'error' and 'trace'. Default to null.
 | owner | `string` | Unique owner of the metrics. This is used to compute the primary key for the metric data item.
 | primaryKey | `string` | Name of the DynamoDB table primary key attribute. Defaults to 'pk'.
