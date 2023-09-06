@@ -237,10 +237,11 @@ export class CustomMetrics {
             let params: DynamoDBClientConfig = {}
             if (options.creds) {
                 params.credentials = options.creds as any
+                //  Allow region in credentials
+                params.region = (params.credentials as any).region
             }
             if (options.region) {
-                //  Allow region in credentials
-                params.region = (params.credentials as any).region || options.region
+                params.region = options.region
             }
             this.client = new DynamoDBClient(params)
         }
@@ -901,7 +902,7 @@ export class CustomMetrics {
             ConsistentRead: this.consistent,
         })
         let data = await this.client.send(command)
-        if (data.Item) {
+        if (data && data.Item) {
             let item = unmarshall(data.Item)
             return this.mapItemFromDB(item)
         }

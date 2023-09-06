@@ -66,9 +66,10 @@ class CustomMetrics {
             let params = {};
             if (options.creds) {
                 params.credentials = options.creds;
+                params.region = params.credentials.region;
             }
             if (options.region) {
-                params.region = params.credentials.region || options.region;
+                params.region = options.region;
             }
             this.client = new client_dynamodb_1.DynamoDBClient(params);
         }
@@ -566,7 +567,7 @@ class CustomMetrics {
             ConsistentRead: this.consistent,
         });
         let data = await this.client.send(command);
-        if (data.Item) {
+        if (data && data.Item) {
             let item = (0, util_dynamodb_1.unmarshall)(data.Item);
             return this.mapItemFromDB(item);
         }
