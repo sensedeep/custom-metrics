@@ -17,11 +17,11 @@ AWS CloudWatch offers metrics to monitor specific aspects of your apps that are 
 
 Unfortunately, the AWS "custom" metrics can be very expensive. If updated or queried regularly. Each each custom metric will cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill.
 
-> **CustomMetrics** provides cost effective metrics that are up to 1000 times cheaper and 10 times faster than standard CloudWatch metrics.
+> **CustomMetrics** provides cost effective metrics that are much cheaper and faster than standard CloudWatch metrics.
 
-CustomMetrics achieves these savings by supporting only "latest" period metrics. i.e. last day, last month, last hour etc. This enables each metric to be saved, stored and queried with minimal cost.
+CustomMetrics achieves these savings by supporting only **latest** period metrics. i.e. last day, last month, last hour, last 5 minutes etc. This enables each metric to be saved, stored and queried with minimal cost.
 
-CustomMetrics saves metrics to a DynamoDB table of your choosing that can coexist with existing application data.
+CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexist with existing application data.
 
 ## CustomMetrics Features
 
@@ -57,7 +57,7 @@ Import the CustomMetrics library. If you are not using ES modules or TypeScript,
 import {CustomMetrics} from 'CustomMetrics'
 ```
 
-Next create and configure the CustomMetrics instance. 
+Next create and configure the CustomMetrics instance by nominating the DynamoDB table and key structure to hold your metrics. 
 
 ```javascript
 const metrics = new CustomMetrics({
@@ -83,6 +83,7 @@ const dynamoDbClient = new DynamoDBClient()
 const metrics = new CustomMetrics({
     client: myDynamoDbClient,
     table: 'MyTable',
+    region: 'us-east-1',
     primaryKey: 'pk',
     sortKey: 'sk',
 })
@@ -90,40 +91,50 @@ const metrics = new CustomMetrics({
 
 ## Emitting Metric Data
 
-You can emit metrics via:
+You can emit metrics via the `emit` API:
 
 ```javascript
 await metrics.emit('Acme/Metrics', 'launches', 10)
 ```
 
-This will emit the `launches` metric in the `Acme/Metrics` namespace with the value of 10. 
+This will emit the `launches` metric in the `Acme/Metrics` namespace with the value of **10**. 
 
 A metric can have dimensions that are unique metric values for specific instances. For example, we may want to count the number of launches for a specific rocket.
 
 ```javascript
-await metrics.emit('Acme/Metrics', 'launches', 10, [{rocket: 'saturnV'}])
+await metrics.emit('Acme/Metrics', 'launches', 10, [
+    {rocket: 'saturnV'}
+])
 ```
 
-The metric will be emitted for each dimension provided. A dimension may have multiple properties.
+The metric will be emitted for each dimension provided. A dimension may have one or more properties. A metric can also be emitted for multiple dimensions. 
 
-If you want to emit a metric without dimensions, you can add {}. For example:
+If you want to emit a metric over all dimensions, you can add {}. For example:
 
 ```javascript
-await metrics.emit('Acme/Metrics', 'launches', 10, [{}, {rocket: 'saturnV'}])
-await metrics.emit('Acme/Metrics', 'launches', 10, [{}, {rocket: 'falcon9'}])
+await metrics.emit('Acme/Metrics', 'launches', 10, [
+    {}, 
+    {rocket: 'saturnV'}
+])
+await metrics.emit('Acme/Metrics', 'launches', 10, [
+    {}, 
+    {rocket: 'falcon9'}
+])
 ```
 
-This will emit a metric that also totals all launches for all rocket types.
+This will emit a metric that is a total of all launches for all rocket types.
 
 ## Query Metrics
 
 To query a metric, use the `query` method:
 
 ```javascript
-let results = await metrics.query('Acme/Metrics', 'speed', {rocket: 'saturnV'}, 86400, 'max')
+let results = await metrics.query('Acme/Metrics', 'speed', {
+    rocket: 'saturnV'
+}, 86400, 'max')
 ```
 
-This will retrieve the 'speed' metric from the 'Acme/Metrics' namespace for the rocket == 'saturnV' dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds).
+This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds).
 
 This will return data like this:
 
@@ -143,10 +154,12 @@ This will return data like this:
 }
 ```
 
-If you want to query the results as a single value over the entire period (instead of as a set of data points), set the "accumulate" options to true.
+If you want to query the results as a single value over the entire period (instead of as a set of data points), set the `accumulate` options to true.
 
 ```javascript
-let results = await metrics.query('Acme/Metrics', 'speed', {rocket: 'saturnV'}, 86400, 'max', {accumulate: true})
+let results = await metrics.query('Acme/Metrics', 'speed', {
+    rocket: 'saturnV'
+}, 86400, 'max', {accumulate: true})
 ```
 
 This will return a single maximum speed over the last day.
@@ -170,10 +183,10 @@ This will return a list of metrics in **list.metrics**. Note: this will return t
 To get a list of the dimensions available for a metric, pass in a namespace and metric.
 
 ```typescript
-let list: MetricList = await metrics.getMetricList('Acme/Metrics', "speed")
+let list: MetricList = await metrics.getMetricList('Acme/Metrics', 'speed')
 ```
 
-This will return a list of dimensions in **list.dimensions**.
+This will also return a list of dimensions in **list.dimensions**.
 
 ## Metrics Scoping
 
@@ -192,8 +205,7 @@ const cartMetrics = new CustomMetrics({
 
 ## Limitations
 
-If you are updating metrics extremely frequently, CustomMetrics can impose a meaningful DynamoDB write load as each metric update will result in a database write. If you have such high frequency metric updates, consider using
-[Metric Buffering](#buffering) to buffer and coalesce metric updates.
+If you are updating metrics extremely frequently, CustomMetrics can impose a meaningful DynamoDB write load as each metric update will result in one database write. If you have very high frequency metric updates, consider using [Metric Buffering](#buffering) to buffer and coalesce metric updates.
 
 ## Metric Schema
 
@@ -347,7 +359,7 @@ Alternatively, the `log` constructor can be set to a logging object such as [Sen
 
 ## Buffering
 
-If app emits metrics at very high frequency, you may wish to optimize metrics by aggregating metric updates. CustomMetrics can aggregate metric updates by buffering emit calls. These are then persisted according to your buffering policy.
+If your app emits metrics at a very high frequency, you may wish to optimize metrics by aggregating metric updates. CustomMetrics can aggregate metric updates by buffering emit calls. These are then persisted according to a buffering policy.
 
 For example:
 
@@ -357,9 +369,9 @@ await metrics.emit('Acme/Metrics', 'DataSent', 123, [], {
 })
 ```
 
-This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first.  If the 'elapsed' property is not provided, the default elapsed period is the interval of your lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
+This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first. If the `elapsed` property is not provided, the default elapsed period is the lowest span interval (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
 
-You can also flush metrics manually by calling 'flush' or 'flushAll' which flushes metrics for all CustomMetrics instances.
+You can also flush metrics manually by calling `flush` to flush metrics for an instance or `flushAll` which flushes metrics for all CustomMetrics instances.
 
 ```javascript
 await metrics.flush()
@@ -368,11 +380,11 @@ await CustomMetrics.flushAll()
 
 If you configure a Lambda layer (any layer will do), CustomMetrics will save buffered metrics upon Lambda instance termination. Unfortunately, Lambda will only send a termination signal to lambdas that utilize a Lambda layer.
 
-Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by emit option.buffer) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
+Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by the emit option.buffer parameter) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
 
 Furthermore, if you have a very large number of metrics in one Lambda instance, it is possible that the Lambda instance may not be able to save all buffered metrics during Lambda termination. This can be somewhat mitigated by using shorter buffering criteria.
 
-For these reasons, don't use buffered metrics if you require absolute precision. But if you have metrics where less than perfect accuracy is acceptable, then buffered metrics can give very large performance gains with minimal loss of precision.
+For these reasons, don't use buffered metrics if you require absolute precision. But if you do have metrics where less than perfect accuracy is acceptable, then buffered metrics can give very large performance gains with minimal loss of precision.
 
 ## Methods
 
@@ -477,7 +489,7 @@ All feedback, discussion, contributions and bug reports are very welcome.
 
 ### SenseDeep
 
-Very soon, we'll be updating [SenseDeep](https://www.sensedeep.com) to graphing and viewing CustomMetrics. We'll also support the ability to create alarms and receive notifications based on CustomMetric data.
+[SenseDeep](https://www.sensedeep.com) can be used to view CustomMetrics graphs and data. You can also create alarms and receive alert notifications based on CustomMetric data expressions.
 
 ### Contact
 
