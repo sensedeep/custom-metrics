@@ -724,11 +724,6 @@ class CustomMetrics {
             let [key, model] = Object.entries(this.type)[0];
             result[key] = model;
         }
-        for (let span of result.spans) {
-            for (let p of span.pt) {
-                this.assert(p.s != null && !isNaN(p.s));
-            }
-        }
         return result;
     }
     static allocInstance(tags, options = {}) {

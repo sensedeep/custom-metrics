@@ -9,7 +9,7 @@
 [![npm](https://img.shields.io/npm/l/custom-metrics.svg)](https://www.npmjs.com/package/custom-metrics)
 [![Coverage Status](https://coveralls.io/repos/github/sensedeep/custom-metrics/badge.svg?branch=main)](https://coveralls.io/github/sensedeep/custom-metrics?branch=main)
 
-CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps.
+CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps. 
 
 ## Background
 
@@ -20,6 +20,8 @@ Unfortunately, the AWS "custom" metrics can be very expensive. If updated or que
 > **CustomMetrics** provides cost effective metrics that are up to 1000 times cheaper and 10 times faster than standard CloudWatch metrics.
 
 CustomMetrics achieves these savings by supporting only "latest" period metrics. i.e. last day, last month, last hour etc. This enables each metric to be saved, stored and queried with minimal cost.
+
+CustomMetrics saves metrics to a DynamoDB table of your choosing that can coexist with existing application data.
 
 ## CustomMetrics Features
 
@@ -36,7 +38,7 @@ CustomMetrics achieves these savings by supporting only "latest" period metrics.
 -   Supports multiple services, apps, namespaces and metrics in a single DynamoDB table.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
--   Clean, readable small code base (~1.2K lines).
+-   Clean, readable, small, TypeScript code base (~1.3K lines).
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
 
 ## Database
