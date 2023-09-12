@@ -369,7 +369,7 @@ await metrics.emit('Acme/Metrics', 'DataSent', 123, [], {
 })
 ```
 
-This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first. If the `elapsed` property is not provided, the default elapsed period is the lowest span interval (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
+This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first. If the `elapsed` property is not provided, the default elapsed period is the data point interval of the lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
 
 You can also flush metrics manually by calling `flush` to flush metrics for an instance or `flushAll` which flushes metrics for all CustomMetrics instances.
 
@@ -403,7 +403,7 @@ async emit(namespace: string,
             count: number, 
             elapsed: number,
         }
-    }): Promise<void>
+    }): Promise<Metric>
 ```
 
 This call will emit metrics for each of the specified dimensions using the supplied namespace and metric name. These will be combined with the CustomMetrics owner supplied via the constructor to scope the metric. 
@@ -440,15 +440,15 @@ async query(namespace: string,
 
 This will retrieve a metric value for a given namespace, metric name and set of dimensions.
 
-The `period` argument selects the metric span name to query. For example: 3600 for one hour.
+The `period` argument selects the best metric span to query. For example: 3600 for one hour. The period will be used by query to find the span that has the same or closest (and greater) period.
 
 The `statistic` can be `avg`, `max`, `min`, `sum`, `count` or a P-value of the form `pNN` where NN is the P-value. For example: p95 would return the P-95 value. To get meaningful P-value statistics you must set the CustomMetrics pResolution parameter to the number of data points to keep for computing P-values. By default this resolution is zero, which means P-values are not computed. To enable, you should set this to at least 100.
 
 The `options` map can modify the query. If `options.accumulate` is true, all points will be aggregated and a single data point will be returned that will represent the desired statistic for the requested period.
 
-If `options.owner` is provided, it overrides the owner give to the CustomMetrics constructor. 
+If `options.owner` is provided, it overrides the default owner or the `owner` given to the CustomMetrics constructor. 
 
-If `options.id` is provided, the ID will be returned in the corresponding result items. This can be used to manager results.
+If `options.id` is provided, the ID will be returned in the corresponding result items. This can help to correlate parallel queries with results.
 
 ### getMetricList
 
@@ -471,7 +471,7 @@ type MetricList = {
 }
 ```
 
-The list of namespaces will always be returned. If a namespace argument is provided, the list of metrics in that namespace will be returned. If a metric argument is provided, the list of dimensions for that metric will be returned.
+If a namespace argument is provided, the list of metrics in that namespace will be returned. If a metric argument is provided, the list of dimensions for that metric will be returned.
 
 
 ### References
@@ -484,8 +484,8 @@ The list of namespaces will always be returned. If a namespace argument is provi
 
 All feedback, discussion, contributions and bug reports are very welcome.
 
--   [discussions](https://github.com/sensedeep/CustomMetrics/discussions)
--   [issues](https://github.com/sensedeep/CustomMetrics/issues)
+-   [Discussions](https://github.com/sensedeep/CustomMetrics/discussions)
+-   [Issues](https://github.com/sensedeep/CustomMetrics/issues)
 
 ### SenseDeep
 
