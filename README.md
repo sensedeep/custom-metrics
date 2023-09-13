@@ -40,6 +40,7 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Written in TypeScript with full TypeScript support.
 -   Clean, readable, small, TypeScript code base (~1.3K lines).
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
+-   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) support CustomMetrics for detailed single table metrics.
 
 ## Database
 
@@ -402,7 +403,8 @@ async emit(namespace: string,
             sum: number, 
             count: number, 
             elapsed: number,
-        }
+        },
+        log: boolean,
     }): Promise<Metric>
 ```
 
@@ -423,6 +425,8 @@ This will create three metrics:
 |Acme/Metrics|launches|mission == ISS-service|
 
 The `buffer` option can be provided to optimize metric load by aggregating calls to emit(). See [Buffering](#buffering) for details.
+
+The `log` option if set to true, will emit debug trace to the console.
 
 ### query
 
@@ -450,6 +454,8 @@ If `options.owner` is provided, it overrides the default owner or the `owner` gi
 
 If `options.id` is provided, the ID will be returned in the corresponding result items. This can help to correlate parallel queries with results.
 
+If `options.log` is set to true, this will emit debug trace to the console.
+
 ### getMetricList
 
 Return a list of supported namespaces, metrics and dimensions.
@@ -476,6 +482,7 @@ If a namespace argument is provided, the list of metrics in that namespace will 
 
 ### References
 
+-   [DynamoDB OneTable](https://www.npmjs.com/package/dynamodb-onetable)
 -   [SenseDeep Blog](https://www.sensedeep.com/blog/)
 -   [SenseDeep Web Site](https://www.sensedeep.com/)
 -   [SenseDeep Developer Studio](https://app.sensedeep.com/)

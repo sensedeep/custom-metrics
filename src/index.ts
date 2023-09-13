@@ -337,7 +337,7 @@ export class CustomMetrics {
         let chan = options.log == true ? 'info' : 'trace'
         do {
             let owner = options.owner || this.owner
-            metric = await this.getMetric(owner, namespace, metricName, dimensions)
+            metric = await this.getMetric(owner, namespace, metricName, dimensions, options.log)
             if (!metric) {
                 metric = this.initMetric(owner, namespace, metricName, dimensions)
             }
@@ -487,7 +487,7 @@ export class CustomMetrics {
          */
         let dimString = this.makeDimensionString(dimensions)
 
-        let metric = await this.getMetric(owner, namespace, metricName, dimString)
+        let metric = await this.getMetric(owner, namespace, metricName, dimString, options.log)
         if (!metric) {
             return {dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
@@ -892,7 +892,7 @@ export class CustomMetrics {
         return metric
     }
 
-    async getMetric(owner: string, namespace: string, metric: string, dimensions: string): Promise<Metric> {
+    async getMetric(owner: string, namespace: string, metric: string, dimensions: string, log: boolean): Promise<Metric> {
         let command = new GetItemCommand({
             TableName: this.table,
             Key: {
@@ -902,11 +902,16 @@ export class CustomMetrics {
             ConsistentRead: this.consistent,
         })
         let data = await this.client.send(command)
+        let result = null
         if (data && data.Item) {
             let item = unmarshall(data.Item)
-            return this.mapItemFromDB(item)
+            result = this.mapItemFromDB(item)
         }
-        return null
+        if (log == true) {
+            let chan = log == true ? 'info' : 'trace'
+            this.log[chan](`GetMetric ${namespace}, ${metric} ${dimensions}`, {cmd: command, result})
+        }
+        return result
     }
 
     async findMetrics(
@@ -989,7 +994,7 @@ export class CustomMetrics {
 
         /* istanbul ignore next */
         let chan = options.log == true ? 'info' : 'trace'
-        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, {dimensions: item.dimensions, command})
+        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, {dimensions: item.dimensions, command, params, item})
 
         try {
             await this.client.send(command)
