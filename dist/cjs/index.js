@@ -133,7 +133,7 @@ class CustomMetrics {
         let chan = options.log == true ? 'info' : 'trace';
         do {
             let owner = options.owner || this.owner;
-            metric = await this.getMetric(owner, namespace, metricName, dimensions);
+            metric = await this.getMetric(owner, namespace, metricName, dimensions, options.log);
             if (!metric) {
                 metric = this.initMetric(owner, namespace, metricName, dimensions);
             }
@@ -224,7 +224,7 @@ class CustomMetrics {
         let owner = options.owner || this.owner;
         await this.flush();
         let dimString = this.makeDimensionString(dimensions);
-        let metric = await this.getMetric(owner, namespace, metricName, dimString);
+        let metric = await this.getMetric(owner, namespace, metricName, dimString, options.log);
         if (!metric) {
             return { dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0 };
         }
@@ -557,7 +557,7 @@ class CustomMetrics {
         }
         return metric;
     }
-    async getMetric(owner, namespace, metric, dimensions) {
+    async getMetric(owner, namespace, metric, dimensions, log) {
         let command = new client_dynamodb_1.GetItemCommand({
             TableName: this.table,
             Key: {
@@ -567,11 +567,16 @@ class CustomMetrics {
             ConsistentRead: this.consistent,
         });
         let data = await this.client.send(command);
+        let result = null;
         if (data && data.Item) {
             let item = (0, util_dynamodb_1.unmarshall)(data.Item);
-            return this.mapItemFromDB(item);
+            result = this.mapItemFromDB(item);
         }
-        return null;
+        if (log == true) {
+            let chan = log == true ? 'info' : 'trace';
+            this.log[chan](`GetMetric ${namespace}, ${metric} ${dimensions}`, { cmd: command, result });
+        }
+        return result;
     }
     async findMetrics(owner, namespace, metric, limit, startKey) {
         let key = [namespace];
@@ -634,7 +639,7 @@ class CustomMetrics {
         };
         let command = new client_dynamodb_1.PutItemCommand(params);
         let chan = options.log == true ? 'info' : 'trace';
-        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, { dimensions: item.dimensions, command });
+        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, { dimensions: item.dimensions, command, params, item });
         try {
             await this.client.send(command);
             return true;

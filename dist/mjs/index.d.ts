@@ -142,7 +142,7 @@ export declare class CustomMetrics {
     private setPoint;
     getMetricList(namespace?: string, metric?: string, options?: MetricListOptions): Promise<MetricList>;
     private initMetric;
-    getMetric(owner: string, namespace: string, metric: string, dimensions: string): Promise<Metric>;
+    getMetric(owner: string, namespace: string, metric: string, dimensions: string, log: boolean): Promise<Metric>;
     findMetrics(owner: string, namespace: string, metric: string | undefined, limit: number, startKey: object): Promise<{
         items: Metric[];
         next: object;
