@@ -42,6 +42,8 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
 -   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) support CustomMetrics for detailed single table metrics.
 
+>Any contributor who could create a [Grafana](https://grafana.com/) plugin - please contact us.
+
 ## Database
 
 CustomMetrics stores each metric in a single, compressed DynamoDB item. 
