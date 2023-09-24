@@ -338,7 +338,7 @@ const DefaultSpans: SpanDef[] = [
 ]
 ```
 
-The span `period` property is the number of seconds in that span. The `samples` property specifies the number of data points to be captured. The (period / points) value is the interval between computed data points. If you call emit() more frequently than this, CustomMetrics will agregate the extra values into the relevant span value.
+The span `period` property is the number of seconds in that span. The `samples` property specifies the number of data points to be captured. If you call emit() more frequently than the `period/samples` interval, CustomMetrics will agregate the extra values into the relevant span point value.
 
 Here is an example of a higher resolution set of spans that keep metric values for 1 minute, 5 minutes, 1 hour and 1 day.
 
@@ -362,7 +362,7 @@ Alternatively, the `log` constructor can be set to a logging object such as [Sen
 
 ## Buffering
 
-If your app emits metrics at a very high frequency, you may wish to optimize metrics by aggregating metric updates. CustomMetrics can aggregate metric updates by buffering emit calls. These are then persisted according to a buffering policy.
+If your app emits metrics at a very high frequency, you may wish to optimize metrics by aggregating metric database updates. CustomMetrics can optimize metric updates by buffering emit calls. These are then persisted according to a buffering policy.
 
 For example:
 
@@ -372,7 +372,7 @@ await metrics.emit('Acme/Metrics', 'DataSent', 123, [], {
 })
 ```
 
-This will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first. If the `elapsed` property is not provided, the default elapsed period is the data point interval of the lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
+This example will buffer metric updates in-memory until the sum of buffered `DataSent` is greater than 1024, or there have been 20 calls to emit, or 60 seconds has elapsed, whichever is reached first. If the `elapsed` property is not provided, the default elapsed period is the data point interval of the lowest span (default 30 seconds).  CustomMetrics will regularly flush metrics as required.
 
 You can also flush metrics manually by calling `flush` to flush metrics for an instance or `flushAll` which flushes metrics for all CustomMetrics instances.
 
@@ -383,7 +383,7 @@ await CustomMetrics.flushAll()
 
 If you configure a Lambda layer (any layer will do), CustomMetrics will save buffered metrics upon Lambda instance termination. Unfortunately, Lambda will only send a termination signal to lambdas that utilize a Lambda layer.
 
-Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by the emit option.buffer parameter) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
+Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by the emit option.buffer parameter) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until the next request or when AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
 
 Furthermore, if you have a very large number of metrics in one Lambda instance, it is possible that the Lambda instance may not be able to save all buffered metrics during Lambda termination. This can be somewhat mitigated by using shorter buffering criteria.
 
@@ -414,7 +414,7 @@ This call will emit metrics for each of the specified dimensions using the suppl
 
 For example:
 
-```typecript
+```typescript
 await metrics.emit('Acme/Metrics', 'launches', 10, 
     [{}, {rocket: 'saturnV'}, {mission: 'ISS-service'}])
 ```
