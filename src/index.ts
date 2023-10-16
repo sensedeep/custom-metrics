@@ -40,15 +40,15 @@ export const DefaultSpans: SpanDef[] = [
 ]
 
 export type Metric = {
-    dimensions: string
-    expires?: number
-    id?: string
+    dimensions: string // Comma separated list of key=value dimensions
+    expires?: number // Date in seconds when the item expires since Jan 1, 1970
+    id?: string // User ID preserved across queries
     metric: string
     namespace: string
-    owner?: string
+    owner?: string // Tenant owner of the metric
     version?: number
     spans: Span[]
-    seq?: number
+    seq?: number // Atomic writing serialization vector
     //  Useful when using streams to filter out items with this attribute
     _source?: string
 }
@@ -109,20 +109,19 @@ export type MetricOptions = {
     client?: DynamoDBClient
     consistent?: boolean
     creds?: object
+    expires?: string // DynamoDB TTL expires attribute (defaults to "expires")
     log?: true | 'verbose' | any
     owner?: string
-    primaryKey?: string
-    sortKey?: string
     prefix?: string
     pResolution?: number
+    primaryKey?: string
     region?: string
+    sortKey?: string
     source?: string
     spans?: SpanDef[]
     table?: string
     ttl?: number
     type?: {[key: string]: string} // Optional single type type field
-    // DEPRECATE
-    tableName?: string
 }
 
 export type MetricBufferOptions = {
@@ -188,6 +187,7 @@ export class CustomMetrics {
     private buffer: MetricBufferOptions | undefined
     private buffers: BufferMap = null
     private client: DynamoDBClient
+    private expires: string
     private log: any
     private options: MetricOptions
     private owner: string
@@ -198,7 +198,6 @@ export class CustomMetrics {
     private source: string | undefined
     private spans: SpanDef[]
     private table: string
-    private timestamp: number
     private type: {[key: string]: string}
     private ttl: number
 
@@ -228,6 +227,7 @@ export class CustomMetrics {
             }
             this.buffer = options.buffer
         }
+        this.expires = options.expires || 'expires'
         this.primaryKey = options.primaryKey || 'pk'
         this.sortKey = options.sortKey || 'sk'
         this.type = options.type || {_type: 'Metric'}
@@ -247,12 +247,11 @@ export class CustomMetrics {
             }
             this.client = new DynamoDBClient(params)
         }
-        if (!options.table && !options.tableName) {
+        if (!options.table) {
             throw new Error('Missing DynamoDB table name property')
         }
-        //  DEPRECATE tableName
         /* istanbul ignore next */
-        this.table = options.table || options.tableName
+        this.table = options.table
 
         this.options = options
         this.owner = options.owner || 'default'
@@ -398,7 +397,6 @@ export class CustomMetrics {
                     this.addValue(metric, point.timestamp, point, si)
                 } else {
                     //  Silently discard
-                    // this.log.error('Cannot determine span index', {point, metric})
                 }
             } else {
                 this.addValue(metric, timestamp, point, 0)
@@ -1063,7 +1061,7 @@ export class CustomMetrics {
                 }
             })
         }
-        let expires = data.expires
+        let expires = data[this.expires]
         let seq = data.seq
         return {dimensions, expires, metric, namespace, owner, seq, spans}
     }
@@ -1072,7 +1070,7 @@ export class CustomMetrics {
         let result = {
             [this.primaryKey]: `${this.prefix}#${Version}#${item.owner}`,
             [this.sortKey]: `${this.prefix}#${item.namespace}#${item.metric}#${item.dimensions}`,
-            expires: item.expires,
+            [this.expires]: item.expires,
             spans: item.spans.map((i) => {
                 return {
                     se: i.end,
@@ -1103,43 +1101,13 @@ export class CustomMetrics {
         return result
     }
 
-    /*
-        Allocate a CustomMetrics instance from the cache
-     */
-    //REMOVE
-    static allocInstance(tags: object, options: MetricOptions = {}) {
-        let key = JSON.stringify(tags)
-        let metrics = Instances[key]
-        if (!metrics) {
-            metrics = Instances[key] = new CustomMetrics(options)
-        }
-        return metrics
-    }
-
-    //REMOVE
-    static freeInstance(tags: object) {
-        let key = JSON.stringify(tags)
-        delete Instances[key]
-    }
-
     static freeInstanceByKey(key: string) {
         delete Instances[key]
-    }
-
-    //REMOVE
-    static getInstance(tags: object) {
-        let key = JSON.stringify(tags)
-        return Instances[key]
     }
 
     static saveInstance(tags: object, metrics: CustomMetrics) {
         let key = JSON.stringify(tags)
         Instances[key] = metrics
-    }
-
-    //REMOVE
-    static getCache() {
-        return Instances
     }
 
     /*
@@ -1151,7 +1119,7 @@ export class CustomMetrics {
     }
 
     /* istanbul ignore next */
-    private assert(c) {
+    private assert(c: any) {
         if (!c && Assert) {
             let msg = {stack: ''}
             if (typeof Error.captureStackTrace === 'function') {
@@ -1264,31 +1232,4 @@ class Log {
             console.log(tag, message)
         }
     }
-
-    /* KEEP
-    Fill a query result with zero data points for all missing points
-
-    function fill(metrics) {
-        for (let metric of metrics) {
-            let nextTime = metric.start.getTime()
-            let end = metric.end.getTime()
-            let interval = (metric.period / metric.samples) * 1000
-            let points = []
-            for (let point of metric.points) {
-                while (nextTime + interval < point.timestamp) {
-                    nextTime += interval
-                    points.push({timestamp: nextTime, value: 0, count: 0})
-                }
-                points.push(point)
-                nextTime = point.timestamp
-            }
-            nextTime += interval
-
-            while (nextTime < end) {
-                points.push({timestamp: nextTime, value: 0, count: 0})
-                nextTime += interval
-            }
-            metric.points = points
-        }
-    } */
 }

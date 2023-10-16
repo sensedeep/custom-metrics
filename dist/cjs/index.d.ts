@@ -63,13 +63,14 @@ export type MetricOptions = {
     client?: DynamoDBClient;
     consistent?: boolean;
     creds?: object;
+    expires?: string;
     log?: true | 'verbose' | any;
     owner?: string;
-    primaryKey?: string;
-    sortKey?: string;
     prefix?: string;
     pResolution?: number;
+    primaryKey?: string;
     region?: string;
+    sortKey?: string;
     source?: string;
     spans?: SpanDef[];
     table?: string;
@@ -77,7 +78,6 @@ export type MetricOptions = {
     type?: {
         [key: string]: string;
     };
-    tableName?: string;
 };
 export type MetricBufferOptions = {
     sum?: number;
@@ -112,14 +112,12 @@ type BufferElt = {
     sum: number;
     timestamp: number;
 };
-type InstanceMap = {
-    [key: string]: CustomMetrics;
-};
 export declare class CustomMetrics {
     private consistent;
     private buffer;
     private buffers;
     private client;
+    private expires;
     private log;
     private options;
     private owner;
@@ -130,7 +128,6 @@ export declare class CustomMetrics {
     private source;
     private spans;
     private table;
-    private timestamp;
     private type;
     private ttl;
     constructor(options?: MetricOptions);
@@ -167,7 +164,6 @@ export declare class CustomMetrics {
             ss: number;
             pt: any[];
         }[];
-        expires: number;
         spans: {
             se: number;
             sp: number;
@@ -177,12 +173,8 @@ export declare class CustomMetrics {
         seq: number;
         _source: string;
     };
-    static allocInstance(tags: object, options?: MetricOptions): CustomMetrics;
-    static freeInstance(tags: object): void;
     static freeInstanceByKey(key: string): void;
-    static getInstance(tags: object): CustomMetrics;
     static saveInstance(tags: object, metrics: CustomMetrics): void;
-    static getCache(): InstanceMap;
     private getTimestamp;
     private assert;
     private info;

@@ -25,6 +25,7 @@ export class CustomMetrics {
     buffer;
     buffers = null;
     client;
+    expires;
     log;
     options;
     owner;
@@ -35,7 +36,6 @@ export class CustomMetrics {
     source;
     spans;
     table;
-    timestamp;
     type;
     ttl;
     constructor(options = {}) {
@@ -64,6 +64,7 @@ export class CustomMetrics {
             }
             this.buffer = options.buffer;
         }
+        this.expires = options.expires || 'expires';
         this.primaryKey = options.primaryKey || 'pk';
         this.sortKey = options.sortKey || 'sk';
         this.type = options.type || { _type: 'Metric' };
@@ -81,10 +82,10 @@ export class CustomMetrics {
             }
             this.client = new DynamoDBClient(params);
         }
-        if (!options.table && !options.tableName) {
+        if (!options.table) {
             throw new Error('Missing DynamoDB table name property');
         }
-        this.table = options.table || options.tableName;
+        this.table = options.table;
         this.options = options;
         this.owner = options.owner || 'default';
         this.spans = options.spans || DefaultSpans;
@@ -719,7 +720,7 @@ export class CustomMetrics {
                 };
             });
         }
-        let expires = data.expires;
+        let expires = data[this.expires];
         let seq = data.seq;
         return { dimensions, expires, metric, namespace, owner, seq, spans };
     }
@@ -727,7 +728,7 @@ export class CustomMetrics {
         let result = {
             [this.primaryKey]: `${this.prefix}#${Version}#${item.owner}`,
             [this.sortKey]: `${this.prefix}#${item.namespace}#${item.metric}#${item.dimensions}`,
-            expires: item.expires,
+            [this.expires]: item.expires,
             spans: item.spans.map((i) => {
                 return {
                     se: i.end,
@@ -757,31 +758,12 @@ export class CustomMetrics {
         }
         return result;
     }
-    static allocInstance(tags, options = {}) {
-        let key = JSON.stringify(tags);
-        let metrics = Instances[key];
-        if (!metrics) {
-            metrics = Instances[key] = new CustomMetrics(options);
-        }
-        return metrics;
-    }
-    static freeInstance(tags) {
-        let key = JSON.stringify(tags);
-        delete Instances[key];
-    }
     static freeInstanceByKey(key) {
         delete Instances[key];
-    }
-    static getInstance(tags) {
-        let key = JSON.stringify(tags);
-        return Instances[key];
     }
     static saveInstance(tags, metrics) {
         let key = JSON.stringify(tags);
         Instances[key] = metrics;
-    }
-    static getCache() {
-        return Instances;
     }
     getTimestamp(span, timestamp) {
         let interval = span.period / span.samples;
