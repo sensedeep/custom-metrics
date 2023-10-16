@@ -43,3 +43,27 @@ test('Test data aging beyond highest span', async () => {
     expect(r.points.length).toBe(1)
     expect(r.points[0].value).toBe(4)
 })
+
+
+test('Test predated data', async() => {
+    let metrics = new CustomMetrics({client, table})
+
+    //  Get at least one point in the span
+    let timestamp = new Date(2000, 0, 1).getTime()
+    let metric = await metrics.emit('test/gap', 'PreDate', 1, [], {timestamp})
+    expect(metric).toBeDefined()
+
+    //  This emit should be discarded as it is too early
+    timestamp -= 365 * 86400 * 1000
+    metric = await metrics.emit('test/gap', 'PreDate', 1, [], {timestamp})
+    expect(metric).toBeDefined()
+    expect(metric.spans[0].points.length).toBe(1)
+    expect(metric.spans[5].points.length).toBe(0)
+
+    let r = await metrics.query('test/gap', 'PreDate', {}, 365 * 86400, 'sum', {timestamp})
+    expect(r).toBeDefined()
+    expect(r.points).toBeDefined()
+    expect(r.points.length).toBe(1)
+    expect(r.points[0].value).toBe(1)
+    expect(r.points[0].count).toBe(1)
+})

@@ -5,7 +5,7 @@ import {client, table, CustomMetrics, DefaultSpans, log, dump} from './utils/ini
 
 // jest.setTimeout(7200 * 1000)
 
-test('Test', async () => {
+test('Test Buffer Basic', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
     let timestamp = new Date(2000, 0, 1).getTime()
     let span = DefaultSpans[0]
@@ -15,17 +15,17 @@ test('Test', async () => {
         Buffer some metrics and then flush
      */
     for (let i = 0; i < 4; i++) {
-        let metric = await metrics.emit('test/buffer', 'BufferMetric', 10, [], {buffer: {elapsed: 1800}, timestamp})
+        let metric = await metrics.emit('test/buffer', 'BasicMetric', 10, [], {buffer: {elapsed: 1800}, timestamp})
         expect(metric).toBeDefined()
-        expect(metric.metric).toBe('BufferMetric')
+        expect(metric.metric).toBe('BasicMetric')
         expect(metric.spans.length).toBe(1)
         expect(metric.spans[0].points.length).toBe(1)
         expect(metric.spans[0].points[0].count).toBe(i + 1)
         timestamp += interval * 1000
     }
-    let r = await metrics.query('test/buffer', 'BufferMetric', {}, 3600, 'avg', {timestamp})
+    let r = await metrics.query('test/buffer', 'BasicMetric', {}, 3600, 'avg', {timestamp})
     expect(r).toBeDefined()
-    expect(r.metric).toBe('BufferMetric')
+    expect(r.metric).toBe('BasicMetric')
     expect(r.namespace).toBe('test/buffer')
     expect(r.period).toBe(3600)
     expect(r.points).toBeDefined()
@@ -44,9 +44,9 @@ test('Test elapsed buffers', async () => {
         Buffer some metrics and then flush
      */
     for (let i = 0; i < 4; i++) {
-        let metric = await metrics.emit('test/buffer', 'BufferMetric', 1, [], {buffer: {elapsed: 1800}, timestamp})
+        let metric = await metrics.emit('test/buffer', 'ElapsedMetric', 1, [], {buffer: {elapsed: 1800}, timestamp})
         expect(metric).toBeDefined()
-        expect(metric.metric).toBe('BufferMetric')
+        expect(metric.metric).toBe('ElapsedMetric')
         expect(metric.spans.length).toBe(1)
         expect(metric.spans[0].points.length).toBe(1)
         expect(metric.spans[0].points[0].count).toBe(i + 1)
@@ -55,17 +55,17 @@ test('Test elapsed buffers', async () => {
     /*
         Emit again after long delay this should cause the prior buffer to be flushed
      */
-    timestamp += 86400 * 1000
-    await metrics.emit('test/buffer', 'BufferMetric', 7, [], {buffer: {elapsed: 1800}, timestamp})
+    timestamp += 3600 * 1000
+    await metrics.emit('test/buffer', 'ElapsedMetric', 7, [], {buffer: {elapsed: 1800}, timestamp})
 
-    let r = await metrics.query('test/buffer', 'BufferMetric', {}, 3600, 'avg', {timestamp})
+    let r = await metrics.query('test/buffer', 'ElapsedMetric', {}, 86400, 'sum', {timestamp})
     expect(r).toBeDefined()
-    expect(r.metric).toBe('BufferMetric')
+    expect(r.metric).toBe('ElapsedMetric')
     expect(r.namespace).toBe('test/buffer')
-    expect(r.period).toBe(3600)
+    expect(r.period).toBe(86400)
     expect(r.points).toBeDefined()
     expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(2.2)
+    expect(r.points[0].value).toBe(11)
     expect(r.points[0].count).toBe(5)
 })
 
@@ -86,4 +86,28 @@ test('Test buffer API', async () => {
     metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [], {buffer: {count: 1}})
     metric = await metrics.emit('test/buffer', 'CoverageMetric', 1, [], {buffer: {count: 1}})
     expect(metric).toBeDefined()
+})
+
+test('Test stale buffered data', async () => {
+    let metrics = new CustomMetrics({client, table, log: true})
+    let timestamp = new Date(2000, 0, 1).getTime()
+
+    //  Emit a non-buffered metric
+    let metric = await metrics.emit('test/buffer', 'StaleMetric', 7, [], {timestamp})
+    expect(metric.spans[0].points[0].sum).toBe(7)
+
+    let r = await metrics.query('test/buffer', 'StaleMetric', {}, 86400, 'sum', {timestamp})
+    expect(r).toBeDefined()
+    expect(r.points[0].value).toBe(7)
+
+    /*
+        Emit a stale buffered metric - should be discarded
+     */
+    timestamp -= 365 * 86400 * 1000
+    await metrics.emit('test/buffer', 'StaleMetric', 100, [], {buffer: {elapsed: 1800, force: true}, timestamp})
+
+    //  Result should be the original metric emitted
+    r = await metrics.query('test/buffer', 'StaleMetric', {}, 86400, 'sum', {timestamp})
+    expect(r).toBeDefined()
+    expect(r.points[0].value).toBe(7)
 })
