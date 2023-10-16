@@ -210,64 +210,6 @@ const cartMetrics = new CustomMetrics({
 
 If you are updating metrics extremely frequently, CustomMetrics can impose a meaningful DynamoDB write load as each metric update will result in one database write. If you have very high frequency metric updates, consider using [Metric Buffering](#buffering) to buffer and coalesce metric updates.
 
-## Metric Schema
-
-CustomMetrics are stored in a DynamoDB table using the following single-table schema. 
-
-The metric namespace, metric name and dimensions are encoded in the sort key to minimize space. The primary key encodes the metric owner to support multi-tenant security of items.
-
-| Field | Attribute | Encoding | Notes |
-| - | - | - | - |
-| primaryKey | primaryKey | ${prefix}#${version}#${owner} |
-| sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions} |
-| expires | expires | number | Time in seconds when for DynamoDB auto removal |
-| spans | spans | string | Array of time spans |
-
-
-The metric spans are encoded as:
-
-| Field | Attribute | Encoding | Notes |
-| - | - | - | - |
-end | se | number | Time in seconds of the end of the last point in the span
-period | sp | number | Span period in seconds
-samples | ss | number | Number of data points in the span
-points | pt | array | Data points 
-
-The span points are encoded as:
-
-| Field | Attribute | Encoding | Notes |
-| - | - | - | - |
-count | c | number | Count of the values in sum
-sum | s | number | Sum of values
-max | x | number | Maximum value seen
-min | m | number | Minimum value seen
-pvalues | v | array | P values
-
-Here is what a metric item looks like:
-
-```javascript
-{
-    pk: `metric#${version}#${owner}`,
-    sk: `metric#${namespace}#${metric}#${dimensions}`,
-    expires: Number,        // Time in seconds since Jan 1, 1970 when the item expires
-    spans: [
-        {
-            se: Number,     // Span End -- Time in seconds for the end of this span
-            sp: Number,     // Span Period -- Time span period in seconds
-            ss: Number,     // Span Samples -- Number of points in this span
-            pt: [
-                c: Number,  // Count of data measurments in this data point
-                x: Number,  // Maximum value in this point
-                m: Number,  // Minimum value in this point
-                s: Number,  // Sum of values in this point (Divide by c for average)
-            ]
-        }, ...
-    ],
-    seq: Number,            // Update sequence number for update collision detection
-    _type: "Metric"         // Item type for Single Table design patterns
-}
-```
-
 ### CustomMetrics Class API
 
 The CustomMetrics class provides the public API for CustomMetrics and public properties.
@@ -481,6 +423,68 @@ type MetricList = {
 
 If a namespace argument is provided, the list of metrics in that namespace will be returned. If a metric argument is provided, the list of dimensions for that metric will be returned.
 
+
+## Metric Schema
+
+CustomMetrics are stored in a DynamoDB table using the following single-table schema. 
+
+The metric namespace, metric name and dimensions are encoded in the sort key to minimize space. The primary key encodes the metric owner to support multi-tenant security of items.
+
+| Field | Attribute | Encoding | Notes |
+| - | - | - | - |
+| primaryKey | primaryKey | ${prefix}#${version}#${owner} |
+| sortKey | primaryKey | ${prefix}#${namespace}#${metric}#${dimensions} |
+| expires | expires | number | Time in seconds when for DynamoDB auto removal |
+| spans | spans | string | Array of time spans |
+
+
+The metric spans are encoded as:
+
+| Field | Attribute | Encoding | Notes |
+| - | - | - | - |
+end | se | number | Time in seconds of the end of the last point in the span
+period | sp | number | Span period in seconds
+samples | ss | number | Number of data points in the span
+points | pt | array | Data points 
+
+The span points are encoded as:
+
+| Field | Attribute | Encoding | Notes |
+| - | - | - | - |
+count | c | number | Count of the values in sum
+sum | s | number | Sum of values
+max | x | number | Maximum value seen
+min | m | number | Minimum value seen
+pvalues | v | array | P values
+
+Here is what a metric item looks like:
+
+```javascript
+{
+    pk: `metric#${version}#${owner}`,
+    sk: `metric#${namespace}#${metric}#${dimensions}`,
+    expires: Number,        // Time in seconds since Jan 1, 1970 when the item expires
+    spans: [
+        {
+            se: Number,     // Span End -- Time in seconds for the end of this span
+            sp: Number,     // Span Period -- Time span period in seconds
+            ss: Number,     // Span Samples -- Number of points in this span
+            pt: [
+                c: Number,  // Count of data measurments in this data point
+                x: Number,  // Maximum value in this point
+                m: Number,  // Minimum value in this point
+                s: Number,  // Sum of values in this point (Divide by c for average)
+            ]
+        }, ...
+    ],
+    seq: Number,            // Update sequence number for update collision detection
+    _type: "Metric"         // Item type for Single Table design patterns
+}
+```
+
+Data from shorter spans are propagated lazily to longer spans when the span points become full. This is done during emit and flush only. Queries will flush buffered metrics for the matching query to disk. Queries will propagate earlier span data points in-memory and will not otherwise update the on-disk representation.
+
+The span.end marks the time of the most recent data point and is updated whenever a new data point is added to the span. Spans may have zero or more data points. The span.end values for the various spans are not correlated or coordinated. 
 
 ### References
 
