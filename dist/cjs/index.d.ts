@@ -104,6 +104,14 @@ export type MetricQueryOptions = {
     owner?: string;
     timestamp?: number;
 };
+type BufferElt = {
+    count: number;
+    dimensions: string;
+    metric: string;
+    namespace: string;
+    sum: number;
+    timestamp: number;
+};
 type InstanceMap = {
     [key: string]: CustomMetrics;
 };
@@ -128,11 +136,13 @@ export declare class CustomMetrics {
     constructor(options?: MetricOptions);
     emit(namespace: string, metricName: string, value: number, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;
     private emitDimensions;
-    private emitDimensionedMetric;
     bufferMetric(namespace: string, metricName: string, point: Point, dimensions: string, options: MetricEmitOptions): Promise<Metric>;
+    private emitDimensionedMetric;
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
     flush(): Promise<void>;
+    flushElt(elt: BufferElt): Promise<void>;
+    getBufferKey(namespace: string, metricName: string, dimensions: string): string;
     query(namespace: string, metricName: string, dimensions: MetricDimensions, period: number, statistic: string, options?: MetricQueryOptions): Promise<MetricQueryResult>;
     private accumulateMetric;
     private calculateSeries;

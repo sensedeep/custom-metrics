@@ -1,5 +1,7 @@
 /*
     CustomMetrics - Simple, configurable, economical metrics for AWS
+
+    See the README for the Metric schema details.
  */
 import process from 'process'
 import {
@@ -184,7 +186,7 @@ process.on(
 export class CustomMetrics {
     private consistent = false
     private buffer: MetricBufferOptions | undefined
-    private buffers: BufferMap = {}
+    private buffers: BufferMap = null
     private client: DynamoDBClient
     private log: any
     private options: MetricOptions
@@ -290,7 +292,6 @@ export class CustomMetrics {
         if (dimensionsList.length == 0) {
             dimensionsList = [{}]
         }
-        this.timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
         let point: Point
         point = {count: 1, sum: value}
         return await this.emitDimensions(namespace, metricName, point, dimensionsList, options)
@@ -307,13 +308,58 @@ export class CustomMetrics {
         for (let dim of dimensionsList) {
             let dimensions = this.makeDimensionString(dim)
             let buffer = options.buffer || this.buffer
-            if (buffer && Buffering) {
+            if (buffer && (buffer.elapsed || buffer.force || buffer.sum || buffer.count) && Buffering) {
                 result = await this.bufferMetric(namespace, metricName, point, dimensions, options)
             } else {
                 result = await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options)
             }
         }
         return result!
+    }
+
+    /*
+        Buffer a metric for specific dimensions
+     */
+    async bufferMetric(
+        namespace: string,
+        metricName: string,
+        point: Point,
+        dimensions: string,
+        options: MetricEmitOptions
+    ): Promise<Metric> {
+        let buffer = options.buffer || this.buffer
+        let key = this.getBufferKey(namespace, metricName, dimensions)
+        let buffers = (this.buffers = this.buffers || {})
+        let timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
+        let elt: BufferElt = (buffers[key] = buffers[key] || {
+            count: 0,
+            sum: 0,
+            timestamp: timestamp + (buffer.elapsed || this.spans[0].period / this.spans[0].samples),
+            namespace: namespace,
+            metric: metricName,
+            dimensions,
+        })
+        elt.count += point.count
+        elt.sum += point.sum
+
+        if (
+            buffer.force ||
+            (buffer.sum && elt.sum >= buffer.sum) ||
+            (buffer.count && elt.count >= buffer.count) ||
+            timestamp >= elt.timestamp
+        ) {
+            options = Object.assign({}, options, {timestamp: timestamp * 1000})
+            await this.emitDimensionedMetric(namespace, metricName, elt, dimensions, options)
+            delete buffers[key]
+        }
+        CustomMetrics.saveInstance({key}, this)
+        return {
+            spans: [{points: [{count: elt.count, sum: elt.sum}]}],
+            metric: metricName,
+            namespace: namespace,
+            owner: options.owner || this.owner,
+            version: Version,
+        } as Metric
     }
 
     /*
@@ -329,6 +375,7 @@ export class CustomMetrics {
         /*
             Update the metric. May need retries if colliding with other updaters.
          */
+        let timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
         let ttl = options.ttl != undefined ? options.ttl : this.ttl
         let retries = MaxRetries
         let metric: Metric | undefined
@@ -339,21 +386,22 @@ export class CustomMetrics {
             let owner = options.owner || this.owner
             metric = await this.getMetric(owner, namespace, metricName, dimensions, options.log)
             if (!metric) {
-                metric = this.initMetric(owner, namespace, metricName, dimensions)
+                metric = this.initMetric(owner, namespace, metricName, dimensions, timestamp)
             }
             if (point.timestamp) {
                 /*
-                    point.timestamp will be set for buffered metrics which may be in the past
-                */
-                let si = metric.spans.findIndex((s) => s.end - s.period <= point.timestamp && point.timestamp < s.end)
+                    Pick the first span for which the point is after the earliest span start or after the end of the span
+                 */
+                let si = metric.spans.findIndex((s) => s.end - s.period <= point.timestamp || s.end <= point.timestamp)
                 /* istanbul ignore else */
                 if (si >= 0) {
                     this.addValue(metric, point.timestamp, point, si)
                 } else {
-                    this.log.error('Cannot determine span index', {point, metric})
+                    //  Silently discard
+                    // this.log.error('Cannot determine span index', {point, metric})
                 }
             } else {
-                this.addValue(metric, point.timestamp, point, 0)
+                this.addValue(metric, timestamp, point, 0)
             }
             /* istanbul ignore next */
             if (this.source) {
@@ -364,7 +412,7 @@ export class CustomMetrics {
                 Users may define a shorter TTL to prune metrics for inactive items.
             */
             if (ttl) {
-                metric.expires = this.timestamp + ttl
+                metric.expires = timestamp + ttl
             }
             if (await this.putMetric(metric, options)) {
                 break
@@ -394,55 +442,10 @@ export class CustomMetrics {
     }
 
     /*
-        Buffer a metric for specific dimensions
-     */
-    async bufferMetric(
-        namespace: string,
-        metricName: string,
-        point: Point,
-        dimensions: string,
-        options: MetricEmitOptions
-    ): Promise<Metric> {
-        let buffer = options.buffer || this.buffer
-        let interval = this.spans[0].period / this.spans[0].samples
-        let key = `${namespace}|${metricName}|${JSON.stringify(dimensions)}`
-        let elt: BufferElt = (this.buffers[key] = this.buffers[key] || {
-            count: 0,
-            sum: 0,
-            timestamp: this.timestamp + (buffer.elapsed || interval),
-            namespace: namespace,
-            metric: metricName,
-            dimensions,
-        })
-        if (
-            buffer.force ||
-            (buffer.sum && elt.sum >= buffer.sum) ||
-            (buffer.count && elt.count >= buffer.count) ||
-            this.timestamp >= elt.timestamp
-        ) {
-            point.timestamp = elt.timestamp
-            await this.emitDimensionedMetric(namespace, metricName, point, dimensions, options)
-        }
-        elt.count += point.count
-        elt.sum += point.sum
-
-        CustomMetrics.saveInstance({key}, this)
-        return {
-            spans: [{points: [{count: elt.count, sum: elt.sum}]}],
-            metric: metricName,
-            namespace: namespace,
-            owner: options.owner || this.owner,
-            version: Version,
-        } as Metric
-    }
-
-    /*
         Flush metrics for all instances on Lambda termination
      */
     static async terminate() {
-        // let start = Date.now()
         await CustomMetrics.flushAll()
-        // console.log(`Lambda terminating, metric flush took ${(Date.now() - start) / 1000} ms`)
     }
 
     static async flushAll() {
@@ -454,11 +457,20 @@ export class CustomMetrics {
     }
 
     async flush() {
+        if (!this.buffers) return
         for (let elt of Object.values(this.buffers)) {
-            let point = {count: elt.count, sum: elt.sum}
-            await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions)
+            await this.flushElt(elt)
         }
-        this.buffers = {}
+        this.buffers = null
+    }
+
+    async flushElt(elt: BufferElt) {
+        let point = {count: elt.count, sum: elt.sum, timestamp: elt.timestamp}
+        await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions, {timestamp: elt.timestamp})
+    }
+
+    getBufferKey(namespace: string, metricName: string, dimensions: string): string {
+        return `${namespace}|${metricName}|${JSON.stringify(dimensions)}`
     }
 
     /*
@@ -472,20 +484,20 @@ export class CustomMetrics {
         statistic: string,
         options: MetricQueryOptions = {}
     ): Promise<MetricQueryResult> {
-        this.timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
-
         let owner = options.owner || this.owner
+        let timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
+        let dimString = this.makeDimensionString(dimensions)
 
         /*
            Flush buffered metrics for this instance. Will still not see buffered metrics in
            other instances until they are flushed.
          */
-        await this.flush()
-
-        /*
-            Get metrics for all spans up to and including the desired span
-         */
-        let dimString = this.makeDimensionString(dimensions)
+        if (this.buffers) {
+            let key = this.getBufferKey(namespace, metricName, dimString)
+            if (this.buffers[key]) {
+                await this.flushElt(this.buffers[key])
+            }
+        }
 
         let metric = await this.getMetric(owner, namespace, metricName, dimString, options.log)
         if (!metric) {
@@ -504,16 +516,16 @@ export class CustomMetrics {
             Aggregate data for all spans less than the desired span.
             Do this because spans are updated lazily on emit.
          */
-        this.addValue(metric, this.timestamp, {count: 0, sum: 0}, 0, period)
+        this.addValue(metric, timestamp, {count: 0, sum: 0}, 0, period)
 
         let result: MetricQueryResult
 
         /* istanbul ignore else */
         if (metric && span) {
             if (options.accumulate) {
-                result = this.accumulateMetric(metric, span, statistic, owner)
+                result = this.accumulateMetric(metric, span, statistic, owner, timestamp)
             } else {
-                result = this.calculateSeries(metric, span, statistic, owner)
+                result = this.calculateSeries(metric, span, statistic, owner, timestamp)
             }
         } else {
             //  Should never happen as spans are created for the desired period
@@ -536,7 +548,13 @@ export class CustomMetrics {
         This is useful for gauges and widgets that need a single data value for the metric.
         According to the desired statistic, this calculates the avg, count, max, min, sum, and pvalues.
      */
-    private accumulateMetric(metric: Metric, span: Span, statistic: string, owner: string): MetricQueryResult {
+    private accumulateMetric(
+        metric: Metric,
+        span: Span,
+        statistic: string,
+        owner: string,
+        timestamp: number
+    ): MetricQueryResult {
         let value: number = 0,
             count: number = 0,
             pvalues: number[] = []
@@ -586,8 +604,6 @@ export class CustomMetrics {
         } else if (statistic == 'avg') {
             value /= Math.max(count, 1)
         }
-        /* istanbul ignore next */
-        let timestamp = (this.timestamp || Date.now()) * 1000
         return {
             dimensions: this.makeDimensionObject(metric.dimensions),
             metric: metric.metric,
@@ -603,15 +619,11 @@ export class CustomMetrics {
         Process the metric points. This is used for graphs that need all the data points.
         This calculates the avg, max, min, sum, count, pvalues and per-point timestamps.
      */
-    private calculateSeries(metric: Metric, span: Span, statistic: string, owner: string): MetricQueryResult {
+    private calculateSeries(metric: Metric, span: Span, statistic: string, owner: string, timestamp: number): MetricQueryResult {
         let points: MetricQueryPoint[] = []
         let interval = span.period / span.samples
 
-        /*
-            The point timestamp for the point is the end of the point, not the start, so -1
-            Also, the last point may have an end beyond the current time, so limit.
-         */
-        let timestamp = span.end - span.points.length * interval
+        let start = span.end - span.points.length * interval
         let value: number = undefined
         let i = 0
         for (let point of span.points) {
@@ -650,9 +662,9 @@ export class CustomMetrics {
                 value = 0
             }
             //  Want timestamp to be the end of the point bucket
-            timestamp += interval
-            timestamp = Math.min(timestamp, this.timestamp)
-            points.push({value, count: point.count, timestamp: timestamp * 1000})
+            start += interval
+            start = Math.min(start, timestamp)
+            points.push({value, count: point.count, timestamp: start * 1000})
             i++
         }
         return {
@@ -698,13 +710,7 @@ export class CustomMetrics {
         We aggregate aged out points to upper spans as required.
         For queries, a queryPeriod nominates the desired span, all lower span values are aggregated up.
      */
-    private addValue(
-        metric: Metric,
-        timestamp: number = this.timestamp,
-        point: Point,
-        si: number,
-        queryPeriod: number = 0
-    ) {
+    private addValue(metric: Metric, timestamp: number, point: Point, si: number, queryPeriod: number = 0) {
         this.assert(metric)
         this.assert(timestamp)
         this.assert(0 <= si && si < metric.spans.length)
@@ -718,7 +724,7 @@ export class CustomMetrics {
         //  Aggregate points to higher spans if not querying or if querying and not yet at desired period
         let aggregate = !queryPeriod || span.period < queryPeriod ? true : false
 
-        //  Just for safety
+        //  Just for safety, should not happen
         /* istanbul ignore next */
         while (points.length > span.samples) {
             points.shift()
@@ -729,21 +735,17 @@ export class CustomMetrics {
         */
         if (points.length) {
             /* istanbul ignore next */
-            if (timestamp < start) {
-                this.log.error('Bad metric span', {metric, point, timestamp, start, span})
-                return
-            }
             let shift = 0
             if (queryPeriod && aggregate) {
                 //  Querying and not yet on the target period, so aggregate all points
                 shift = points.length
-            } else if (point.count) {
-                //  Point to add and either querying and not on the target period or normal emit.
-                //  Add one more to make room for this point being added incase points[] is full.
-                shift = Math.floor((timestamp - start) / interval) - span.samples + 1
-            } else if (queryPeriod) {
-                //  Querying and on target period so, shift out all points that have aged out.
+            } else if (timestamp >= start) {
+                //  Count of aged data points
                 shift = Math.floor((timestamp - start) / interval) - span.samples
+                if (!queryPeriod) {
+                    //  Add one more to make room for this point being added incase points[] is full.
+                    shift += 1
+                }
             }
             shift = Math.max(0, Math.min(shift, points.length))
             this.assert(0 <= shift && shift <= points.length)
@@ -767,7 +769,10 @@ export class CustomMetrics {
             if (points.length == 0) {
                 start = span.end = this.getTimestamp(span, timestamp)
             }
-            //  Desired time period pre-dates span points
+            if (timestamp < span.end - span.period) {
+                //  Discard if before the earliest possible point for the span
+                return
+            }
             while (timestamp < start) {
                 points.unshift({count: 0, sum: 0})
                 start -= interval
@@ -778,7 +783,6 @@ export class CustomMetrics {
                 span.end += interval
             }
             this.assert(points.length <= span.samples)
-
             let index = Math.floor((timestamp - start) / interval)
             this.assert(0 <= index && index < points.length)
             this.setPoint(span, index, point)
@@ -870,7 +874,7 @@ export class CustomMetrics {
         return result
     }
 
-    private initMetric(owner: string, namespace: string, name: string, dimensions: string): Metric {
+    private initMetric(owner: string, namespace: string, name: string, dimensions: string, timestamp: number): Metric {
         let metric: Metric = {
             dimensions,
             metric: name,
@@ -883,16 +887,22 @@ export class CustomMetrics {
             let span: Span = {
                 samples: sdef.samples,
                 period: sdef.period,
-                end: this.timestamp,
+                end: timestamp,
                 points: [],
             }
-            span.end = this.getTimestamp(span)
+            span.end = this.getTimestamp(span, timestamp)
             metric.spans.push(span)
         }
         return metric
     }
 
-    async getMetric(owner: string, namespace: string, metric: string, dimensions: string, log: boolean): Promise<Metric> {
+    async getMetric(
+        owner: string,
+        namespace: string,
+        metric: string,
+        dimensions: string,
+        log: boolean
+    ): Promise<Metric> {
         let command = new GetItemCommand({
             TableName: this.table,
             Key: {
@@ -994,13 +1004,18 @@ export class CustomMetrics {
 
         /* istanbul ignore next */
         let chan = options.log == true ? 'info' : 'trace'
-        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, {dimensions: item.dimensions, command, params, item})
+        this.log[chan](`Put metric ${item.namespace}, ${item.metric}`, {
+            dimensions: item.dimensions,
+            command,
+            params,
+            item,
+        })
 
         try {
             await this.client.send(command)
             return true
         } catch (err) /* istanbul ignore next */ {
-                ;(function (err, log) {
+            ;(function (err, log) {
                 //  SDK V3 puts the code in err.name (Ugh!)
                 let code = err.code || err.name
                 if (code == 'ConditionalCheckFailedException') {
@@ -1130,7 +1145,7 @@ export class CustomMetrics {
     /*
         Get a rounded timestamp in seconds
      */
-    private getTimestamp(span: Span, timestamp: number = this.timestamp): number {
+    private getTimestamp(span: Span, timestamp: number): number {
         let interval = span.period / span.samples
         return Math.ceil(timestamp / interval) * interval
     }
@@ -1144,7 +1159,7 @@ export class CustomMetrics {
             } else {
                 msg.stack = new Error('Assert').stack
             }
-            this.log.error(`Assertion failed ${msg.stack}`)
+            this.log.error(`Assertion failed`, {stack: msg.stack})
         }
     }
 
