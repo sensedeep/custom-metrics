@@ -428,36 +428,37 @@ class CustomMetrics {
         let span = metric.spans[si];
         let interval = span.period / span.samples;
         let points = span.points || [];
-        let start = span.end - points.length * interval;
-        let aggregate = !queryPeriod || span.period < queryPeriod ? true : false;
+        let queryRecurse = queryPeriod && span.period < queryPeriod && si + 1 < metric.spans.length;
         while (points.length > span.samples) {
             points.shift();
         }
+        let start = span.end - points.length * interval;
+        let shift = 0;
         if (points.length) {
-            let shift = 0;
-            if (queryPeriod && aggregate) {
+            if (queryRecurse) {
                 shift = points.length;
             }
             else if (timestamp >= start) {
                 shift = Math.floor((timestamp - start) / interval) - span.samples;
-                if (!queryPeriod) {
+                if (!queryRecurse && point.count && timestamp >= span.end) {
                     shift += 1;
                 }
             }
             shift = Math.max(0, Math.min(shift, points.length));
             this.assert(0 <= shift && shift <= points.length);
-            while (shift-- > 0) {
+            for (let i = 0; i < shift; i++) {
                 let p = points.shift();
-                if (aggregate && p.count && si + 1 < metric.spans.length) {
+                if (p.count && si + 1 < metric.spans.length) {
                     this.addValue(metric, start, p, si + 1, queryPeriod);
                 }
                 start += interval;
             }
         }
-        if (aggregate && queryPeriod && si + 1 < metric.spans.length) {
+        if (queryRecurse) {
             this.addValue(metric, timestamp, point, si + 1, queryPeriod);
+            return;
         }
-        else if (point.count) {
+        if (point.count) {
             if (points.length == 0) {
                 start = span.end = this.getTimestamp(span, timestamp);
             }
@@ -472,9 +473,14 @@ class CustomMetrics {
                 points.push({ count: 0, sum: 0 });
                 span.end += interval;
             }
-            this.assert(points.length <= span.samples);
             let index = Math.floor((timestamp - start) / interval);
-            this.assert(0 <= index && index < points.length);
+            this.assert(points.length <= span.samples);
+            if (!(0 <= index && index < points.length)) {
+                this.assert(0 <= index && index < points.length);
+                if (index > 0) {
+                    index = points.length - 1;
+                }
+            }
             this.setPoint(span, index, point);
         }
     }

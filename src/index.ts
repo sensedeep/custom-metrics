@@ -31,12 +31,12 @@ type SpanDef = {
     Default spans are configurable by the constructor
  */
 export const DefaultSpans: SpanDef[] = [
-    {period: 5 * 60, samples: 10}, //  5 mins, interval: 30 secs
-    {period: 60 * 60, samples: 12}, //  1 hr, interval: 5 mins
-    {period: 24 * 60 * 60, samples: 12}, //  24 hrs, interval: 2 hrs
-    {period: 7 * 24 * 60 * 60, samples: 14}, //  7 days, interval: 1/2 day
-    {period: 28 * 24 * 60 * 60, samples: 14}, //  28 days, interval: 2 days
-    {period: 365 * 24 * 60 * 60, samples: 12}, //  1 year, interval: 1 month
+    {period: 5 * 60, samples: 10}, //  300, 5 mins, interval: 30 secs
+    {period: 60 * 60, samples: 12}, //  3600, 1 hr, interval: 5 mins 
+    {period: 24 * 60 * 60, samples: 12}, // 86400, 24 hrs, interval: 2 hrs
+    {period: 7 * 24 * 60 * 60, samples: 14}, // 604,800, 7 days, interval: 1/2 day
+    {period: 28 * 24 * 60 * 60, samples: 14}, // 2,419,200, 28 days, interval: 2 days
+    {period: 365 * 24 * 60 * 60, samples: 12}, // 31,536,000, 1 year, interval: 1 month
 ]
 
 export type Metric = {
@@ -717,31 +717,30 @@ export class CustomMetrics {
         let interval = span.period / span.samples
         /* istanbul ignore next */
         let points = span.points || []
-        let start = span.end - points.length * interval
 
-        //  Aggregate points to higher spans if not querying or if querying and not yet at desired period
-        let aggregate = !queryPeriod || span.period < queryPeriod ? true : false
+        let queryRecurse = queryPeriod && span.period < queryPeriod  && si + 1 < metric.spans.length
 
         //  Just for safety, should not happen
         /* istanbul ignore next */
         while (points.length > span.samples) {
             points.shift()
         }
+        let start = span.end - points.length * interval
 
         /*
             Aggregate points. Calculate how many points have aged, or if querying, how many must be aggregated.
         */
+        let shift = 0
         if (points.length) {
             /* istanbul ignore next */
-            let shift = 0
-            if (queryPeriod && aggregate) {
+            if (queryRecurse) {
                 //  Querying and not yet on the target period, so aggregate all points
                 shift = points.length
             } else if (timestamp >= start) {
                 //  Count of aged data points
                 shift = Math.floor((timestamp - start) / interval) - span.samples
-                if (!queryPeriod) {
-                    //  Add one more to make room for this point being added incase points[] is full.
+                if (!queryRecurse && point.count && timestamp >= span.end) {
+                    //  Add one more to make room for this point being added
                     shift += 1
                 }
             }
@@ -749,21 +748,22 @@ export class CustomMetrics {
             this.assert(0 <= shift && shift <= points.length)
 
             /*
-                Shift out aged points to make room. Propagate up to higher spans.
+                Add points to the next span by shifting aged points and make room.
              */
-            while (shift-- > 0) {
+            for (let i = 0; i < shift; i++) {
                 let p = points.shift()
-                //  Recurse and add the point to the next metric. If querying, only to this if recursing
-                if (aggregate && p.count && si + 1 < metric.spans.length) {
+                if (p.count && si + 1 < metric.spans.length) {
                     this.addValue(metric, start, p, si + 1, queryPeriod)
                 }
                 start += interval
             }
         }
-        if (aggregate && queryPeriod && si + 1 < metric.spans.length) {
-            //  Querying and must recurse to aggregate all periods up to the target
+        if (queryRecurse) {
+            //  Querying and not at the terminal period. Must recurse and aggregate all spans up to the target span.
             this.addValue(metric, timestamp, point, si + 1, queryPeriod)
-        } else if (point.count) {
+            return
+        } 
+        if (point.count) {
             if (points.length == 0) {
                 start = span.end = this.getTimestamp(span, timestamp)
             }
@@ -775,14 +775,21 @@ export class CustomMetrics {
                 points.unshift({count: 0, sum: 0})
                 start -= interval
             }
-            //  Must always push one point space for the current point
             while (timestamp >= span.end) {
                 points.push({count: 0, sum: 0})
                 span.end += interval
             }
-            this.assert(points.length <= span.samples)
             let index = Math.floor((timestamp - start) / interval)
-            this.assert(0 <= index && index < points.length)
+            this.assert(points.length <= span.samples)
+
+            if (!(0 <= index && index < points.length)) {
+                this.assert(0 <= index && index < points.length)
+                //  Just in case - should never happen
+                /* istanbul ignore next */
+                if (index > 0) {
+                    index = points.length - 1
+                }
+            }
             this.setPoint(span, index, point)
         }
     }
