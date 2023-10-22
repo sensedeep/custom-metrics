@@ -26,31 +26,27 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 ## CustomMetrics Features
 
 -   Simple one line API to emit metrics from any NodeJS TypeScript or JavaScript app.
--   Similar metric model to supporting namespaces, metrics, dimensions, statistics and intervals.
+-   Similar metric model to AWS CloudWatch metrics supporting namespaces, metrics, dimensions, statistics and intervals.
 -   Computes statistics for: average, min, max, count and sum.
 -   Computes P value statistics with configurable P value resolution.
 -   Supports a default metric intervals of: last 5 mins, hour, day, week, month and year.
 -   Configurable custom intervals for higher or different metric intervals.
 -   Fast and flexible metric query API.
 -   Query API can return data points or aggregate metric data to a single statistic.
--   Scalable to support many simultaneous clients emitting metrics.
+-   Scalable and supports many simultaneous clients emitting metrics.
 -   Stores data in any existing DynamoDB table and coexists with existing app data.
 -   Supports multiple services, apps, namespaces and metrics in a single DynamoDB table.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
 -   Clean, readable, small, TypeScript code base (~1.3K lines).
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
--   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) support CustomMetrics for detailed single table metrics.
+-   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics.
 
 >Any contributor who could create a [Grafana](https://grafana.com/) plugin - please contact us.
 
-## Database
-
-CustomMetrics stores each metric in a single, compressed DynamoDB item. 
-
 ## Quick Tour
 
-Install the library using npm or yarn.
+Install the library using npm:
 
     npm i custom-metrics
 
@@ -71,7 +67,7 @@ const metrics = new CustomMetrics({
 })
 ```
 
-Metrics are stored in the DynamoDB database referenced by the **table** name in the desired region. This table can be your existing application DynamoDB table and metrics can safely coexist with your app data.
+Metrics are stored in the DynamoDB database referenced by the **table** name in the desired region. This table can be your existing application DynamoDB table and metrics can safely coexist with your data.
 
 The **primaryKey** and **sortKey** are the primary and sort keys for the main table index. These default to 'pk' and 'sk' respectively. CustomMetrics does not support tables without a sort key.
 
@@ -428,7 +424,7 @@ If a namespace argument is provided, the list of metrics in that namespace will 
 
 ## Metric Schema
 
-CustomMetrics are stored in a DynamoDB table using the following single-table schema. 
+CustomMetrics are stored in a DynamoDB table using the following single-table schema. Metrics are stored as a single, compressed DynamoDB item. 
 
 The metric namespace, metric name and dimensions are encoded in the sort key to minimize space. The primary key encodes the metric owner to support multi-tenant security of items.
 
