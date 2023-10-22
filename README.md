@@ -15,7 +15,7 @@ CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps.
 
 AWS CloudWatch offers metrics to monitor specific aspects of your apps that are not covered by the default AWS infrastructure metrics. 
 
-Unfortunately, the AWS "custom" metrics can be very expensive. If updated or queried regularly. Each each custom metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill.
+Unfortunately, the AWS "custom" metrics can be very expensive. If updated or queried regularly, each each custom metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill.
 
 > **CustomMetrics** provides cost effective metrics that are much cheaper and faster than standard CloudWatch metrics.
 
