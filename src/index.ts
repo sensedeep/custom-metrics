@@ -566,6 +566,9 @@ export class CustomMetrics {
         } else if (statistic == 'count') {
             value = 0
             count = 0
+        } else if (statistic == 'current') {
+            value = 0
+            count = 0
         } else if (statistic.match(/^p[0-9]+/)) {
             pvalues = []
         } /* avg */ else {
@@ -591,6 +594,8 @@ export class CustomMetrics {
                 }
             } else if (statistic == 'sum') {
                 value += point.sum
+            } else if (statistic == 'current') {
+                value = point.sum / (point.count || 1)
             } else if (statistic == 'count') {
                 value += point.count
             } else if (statistic.match(/^p[0-9]+/)) {
@@ -659,7 +664,7 @@ export class CustomMetrics {
                     pvalues.sort((a, b) => a - b)
                     let nth = Math.min(Math.round((pvalues.length * p) / 100 + 1), pvalues.length - 1)
                     value = pvalues[nth]
-                } /* avg */ else {
+                } /* avg | current */ else {
                     value = point.sum / point.count
                 }
             } else {

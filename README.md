@@ -388,7 +388,13 @@ This will retrieve a metric value for a given namespace, metric name and set of 
 
 The `period` argument selects the best metric span to query. For example: 3600 for one hour. The period will be used by query to find the span that has the same or closest (and greater) period.
 
-The `statistic` can be `avg`, `max`, `min`, `sum`, `count` or a P-value of the form `pNN` where NN is the P-value. For example: p95 would return the P-95 value. To get meaningful P-value statistics you must set the CustomMetrics pResolution parameter to the number of data points to keep for computing P-values. By default this resolution is zero, which means P-values are not computed. To enable, you should set this to at least 100.
+The `statistic` can be `avg`, `current`, `max`, `min`, `sum`, `count` or a P-value of the form `pNN` where NN is the P-value. 
+
+The `avg`, `max` and `min` statistics compute the average, maximum and minimum value for each span data point. The `current` statistic uses the most recent value for each span data point and is useful when used with the `accumulate` option to return the most recent value of a metric.
+
+The `sum` statistic returns the summation of the values for each span data point and the `count` statistic returns the number of values for a span data point. 
+
+For a P-value metric example: p95 would return the P-95 value. To get meaningful P-value statistics you must set the CustomMetrics pResolution parameter to the number of data points to keep for computing P-values. By default this resolution is zero, which means P-values are not computed. To enable, you should set this to at least 100.
 
 The `options` map can modify the query. If `options.accumulate` is true, all points will be aggregated and a single data point will be returned that will represent the desired statistic for the requested period.
 
