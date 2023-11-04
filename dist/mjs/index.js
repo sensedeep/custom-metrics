@@ -295,6 +295,10 @@ export class CustomMetrics {
             value = 0;
             count = 0;
         }
+        else if (statistic == 'current') {
+            value = 0;
+            count = 0;
+        }
         else if (statistic.match(/^p[0-9]+/)) {
             pvalues = [];
         }
@@ -309,14 +313,23 @@ export class CustomMetrics {
                 if (point.max != undefined) {
                     value = Math.max(value, point.max);
                 }
+                else {
+                    value = Math.max(value, point.sum / (point.count || 1));
+                }
             }
             else if (statistic == 'min') {
                 if (point.min != undefined) {
                     value = Math.min(value, point.min);
                 }
+                else {
+                    value = Math.min(value, point.sum / (point.count || 1));
+                }
             }
             else if (statistic == 'sum') {
                 value += point.sum;
+            }
+            else if (statistic == 'current') {
+                value = point.sum / (point.count || 1);
             }
             else if (statistic == 'count') {
                 value += point.count;
