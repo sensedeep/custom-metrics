@@ -578,10 +578,16 @@ export class CustomMetrics {
             if (statistic == 'max') {
                 if (point.max != undefined) {
                     value = Math.max(value, point.max)
+                } else {
+                    //  For use to accumulate AWS metrics that don't keep min/max in points
+                    value = Math.max(value, point.sum / (point.count || 1))
                 }
             } else if (statistic == 'min') {
                 if (point.min != undefined) {
                     value = Math.min(value, point.min)
+                } else {
+                    //  For use to accumulate AWS metrics that don't keep min/max in points
+                    value = Math.min(value, point.sum / (point.count || 1))
                 }
             } else if (statistic == 'sum') {
                 value += point.sum
