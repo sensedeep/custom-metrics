@@ -4,10 +4,12 @@
 
 ## Low cost, fast, simple, scalable metrics for AWS
 
+<!--
 [![Build Status](https://img.shields.io/github/actions/workflow/status/sensedeep/custom-metrics/build.yml?branch=main)](https://img.shields.io/github/actions/workflow/status/sensedeep/custom-metrics/build.yml?branch=main)
 [![npm](https://img.shields.io/npm/v/custom-metrics.svg)](https://www.npmjs.com/package/custom-metrics)
 [![npm](https://img.shields.io/npm/l/custom-metrics.svg)](https://www.npmjs.com/package/custom-metrics)
 [![Coverage Status](https://coveralls.io/repos/github/sensedeep/custom-metrics/badge.svg?branch=main)](https://coveralls.io/github/sensedeep/custom-metrics?branch=main)
+-->
 
 CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps. 
 
