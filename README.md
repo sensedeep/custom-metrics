@@ -144,12 +144,12 @@ This will return data like this:
     "namespace": "Acme/Metrics",
     "metric": "launches",
     "dimensions": {"rocket": "saturnV"},
-    "spans": [{
-        "end": 946648800,
-        "period": 300,
+    "period": 300,
+    "points": [{
+        "period": 3600,
         "samples": 10,
         "points": [
-            { "sum": 24000, "count": 19, "min": 1000, "max": 5000 },
+            { "value": 24000, "count": 19, "timestamp": 1715298000 },
         ]
     }]
 }
@@ -391,6 +391,8 @@ This will retrieve a metric value for a given namespace, metric name and set of 
 The `period` argument selects the best metric span to query. For example: 3600 for one hour. The period will be used by query to find the span that has the same or closest (and greater) period.
 
 The `statistic` can be `avg`, `current`, `max`, `min`, `sum`, `count` or a P-value of the form `pNN` where NN is the P-value. 
+
+The returned data will contain the `namespace`, `metric`, `dimensions` and data `points` for the query. The data points array will contain data with `value`, `count`, `timestamp` properties.
 
 The `avg`, `max` and `min` statistics compute the average, maximum and minimum value for each span data point. The `current` statistic uses the most recent value for each span data point and is useful when used with the `accumulate` option to return the most recent value of a metric.
 
