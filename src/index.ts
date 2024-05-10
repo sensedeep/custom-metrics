@@ -54,11 +54,11 @@ export type Metric = {
 }
 
 export type Point = {
-    count: number
+    count: number               //  Count of values in sum
     max?: number
     min?: number
     pvalues?: number[]
-    sum: number
+    sum: number                 //  Aggregated values
     //  Never stored
     timestamp?: number
 }
@@ -84,10 +84,6 @@ export type MetricList = {
 // Type for query result points[]
 export type MetricQueryPoint = {
     count: number
-    max?: number
-    min?: number
-    pvalues?: number[]
-    sum?: number
     timestamp?: number
     value?: number
 }

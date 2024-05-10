@@ -41,10 +41,6 @@ export type MetricList = {
 };
 export type MetricQueryPoint = {
     count: number;
-    max?: number;
-    min?: number;
-    pvalues?: number[];
-    sum?: number;
     timestamp?: number;
     value?: number;
 };
