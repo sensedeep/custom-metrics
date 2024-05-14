@@ -25,6 +25,8 @@ CustomMetrics achieves dramatic savings by supporting only **latest** period met
 
 CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexist with existing application data.
 
+![Dashboard](./doc/dashboard.avif)
+
 ## CustomMetrics Features
 
 -   Simple one line API to emit metrics from any NodeJS TypeScript or JavaScript app.
@@ -44,7 +46,7 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
 -   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics.
 
->Any contributor who could create a [Grafana](https://grafana.com/) plugin - please contact us.
+![Dark Mode](./doc/dashboard-dark.avif)
 
 ## Quick Tour
 
