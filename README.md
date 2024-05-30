@@ -15,13 +15,11 @@ CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps.
 
 ## Background
 
-AWS CloudWatch offers metrics to monitor specific aspects of your apps that are not covered by the default AWS infrastructure metrics. 
+AWS CloudWatch offers metrics to monitor AWS services and your apps. Unfortunately, custom AWS CloudWatch metrics can be very expensive. If updated or queried regularly, each each custom AWS CloudWatch metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill. This high cost prevents using metrics liberally in your app at scale.
 
-Unfortunately, AWS CloudWatch metrics can be very expensive. If updated or queried regularly, each each custom AWS CloudWatch metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill.
+> **CustomMetrics** provides low cost metrics that are much cheaper and faster than standard AWS CloudWatch metrics.
 
-> **CustomMetrics** provides cost effective metrics that are much cheaper and faster than standard CloudWatch metrics.
-
-CustomMetrics achieves dramatic savings by supporting only **latest** period metrics. i.e. last day, last month, last hour, last 5 minutes etc. This enables each metric to be saved, stored and queried with minimal cost.
+CustomMetrics achieves dramatic savings by supporting **latest** period metrics. i.e. last day, last month, last hour, last 5 minutes etc. This enables each metric to be saved, stored and queried with minimal cost.
 
 CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexist with existing application data.
 
@@ -34,6 +32,7 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Computes statistics for: average, min, max, count and sum.
 -   Computes P value statistics with configurable P value resolution.
 -   Supports a default metric intervals of: last 5 mins, hour, day, week, month and year.
+-   Supports querying from arbitrary start dates.
 -   Configurable custom intervals for higher or different metric intervals.
 -   Fast and flexible metric query API.
 -   Query API can return data points or aggregate metric data to a single statistic.
@@ -265,9 +264,11 @@ const metrics = new CustomMetrics({
 })
 ```
 
-CustomMetric spans define how each metric is processed and aged. The spans are an ordered list of metric interval periods. For example, the default spans calculate statistics for the periods: 5 minutes, 1 hour, 1 day, 1 week, 1 month and 1 year. 
+CustomMetric spans define how each metric is processed and aged. The spans are an ordered list of metric interval periods. 
 
-Via the `spans` constructor option you can provide an alternate list of spans for higher, lower or more granular resolution.
+The default spans store statistics for the periods: 5 minutes, 1 hour, 1 day, 1 week, 1 month and 1 year. 
+
+Via the `spans` CustomMetrics constructor you can provide an alternate list of spans for higher, lower or more granular resolution.
 
 The default CustomMetrics spans are:
 
@@ -296,6 +297,26 @@ const metrics = new CustomMetrics({
         {period: 24 * 60 * 60, samples: 12}, //  interval: 2 hrs
     ]
 })
+```
+
+#### Upgrading Metric Spans
+
+If you want to change your spans in the future, you can upgrade your metric data with new spans. To do this, you can use the `upgrade` method. This will apportion data points from the old spans to the new spans. If the number of samples in a span is increased, the data points will be apportioned across the new span.
+
+WARNING: if you define new spans via the constructor and do not call upgrade, the results may be unpredictable. If you do upgrade your metrics, ensure you supply the new span definition to all your constructor calls going forward. Otherwise, the default spans will be used.
+
+```typescript
+const metrics = new CustomMetrics({
+    table: 'mytable',
+    //  New spans
+    spans: [
+        {period: 24 * 60 * 60, samples: 24},
+        {period: 7 * 24 * 60 * 60, samples: 28},
+        {period: 28 * 24 * 60 * 60, samples: 28},
+        {period: 365 * 24 * 60 * 60, samples: 48},
+    ]
+})
+await metrics.upgrade()
 ```
 
 ## Logging

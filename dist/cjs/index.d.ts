@@ -98,6 +98,7 @@ export type MetricQueryOptions = {
     id?: string;
     log?: boolean;
     owner?: string;
+    start?: number;
     timestamp?: number;
 };
 type BufferElt = {

@@ -243,14 +243,31 @@ class CustomMetrics {
         if (!metric) {
             return { dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0 };
         }
-        let span = metric.spans.find((s) => period <= s.period);
-        if (!span) {
-            span = metric.spans[metric.spans.length - 1];
-            period = span.period;
+        let span;
+        if (options.start) {
+            span = metric.spans.find((s) => (s.end - s.period) <= options.start / 1000);
+            if (!span) {
+                span = metric.spans[metric.spans.length - 1];
+                period = span.period;
+            }
+        }
+        else {
+            span = metric.spans.find((s) => period <= s.period);
+            if (!span) {
+                span = metric.spans[metric.spans.length - 1];
+                period = span.period;
+            }
         }
         this.addValue(metric, timestamp, { count: 0, sum: 0 }, 0, period);
         let result;
         if (metric && span) {
+            if (options.start) {
+                let interval = span.period / span.samples;
+                let end = span.points.length - Math.ceil((span.end - (options.start / 1000 + period)) / interval);
+                let front = end - Math.round(period / interval);
+                span.end -= (span.points.length - end) * interval;
+                span.points = span.points.slice(front, end);
+            }
             if (options.accumulate) {
                 result = this.accumulateMetric(metric, span, statistic, owner, timestamp);
             }

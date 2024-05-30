@@ -2,8 +2,8 @@
     Setup -- setup for the test run
  */
 import {DynamoDBClient} from '@aws-sdk/client-dynamodb'
-import {CreateTableCommand, DescribeTableCommand} from '@aws-sdk/client-dynamodb'
-import DynamoDbLocal from 'dynamo-db-local'
+import {CreateTableCommand, CreateTableCommandInput, DescribeTableCommand} from '@aws-sdk/client-dynamodb'
+import * as DynamoDbLocal from 'dynamo-db-local'
 import waitPort from 'wait-port'
 
 const PORT = parseInt(process.env.PORT || '4765')
@@ -41,7 +41,7 @@ module.exports = async () => {
 }
 
 async function createTable(client, table) {
-    let def = {
+    let def: CreateTableCommandInput = {
         AttributeDefinitions: [
             {AttributeName: 'pk', AttributeType: 'S'},
             {AttributeName: 'sk', AttributeType: 'S'},
