@@ -146,6 +146,7 @@ export type MetricQueryOptions = {
     id?: string
     log?: boolean
     owner?: string
+    start?: number
     timestamp?: number
 }
 
@@ -497,14 +498,26 @@ export class CustomMetrics {
         if (!metric) {
             return {dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
-        /*
-            Map the period to the closest span that has a period equal or larger.
-            If the period is too big, then use the largest span period.
-         */
-        let span = metric.spans.find((s) => period <= s.period)
-        if (!span) {
-            span = metric.spans[metric.spans.length - 1]
-            period = span.period
+        let span
+        if (options.start) {
+            /*
+                Map the period that encompasses the start
+             */
+            span = metric.spans.find((s) => (s.end - s.period) <= options.start / 1000)
+            if (!span) {
+                span = metric.spans[metric.spans.length - 1]
+                period = span.period
+            }
+        } else {
+            /*
+                Map the period to the closest span that has a period equal or larger.
+                If the period is too big, then use the largest span period.
+            */
+            span = metric.spans.find((s) => period <= s.period)
+            if (!span) {
+                span = metric.spans[metric.spans.length - 1]
+                period = span.period
+            }
         }
         /*
             Aggregate data for all spans less than the desired span.
@@ -516,6 +529,13 @@ export class CustomMetrics {
 
         /* istanbul ignore else */
         if (metric && span) {
+            if (options.start) {
+                let interval = span.period / span.samples
+                let end = span.points.length - Math.ceil((span.end - (options.start/1000 + period)) / interval)
+                let front = end - Math.round(period / interval)
+                span.end -= (span.points.length - end) * interval
+                span.points = span.points.slice(front, end)
+            }
             if (options.accumulate) {
                 result = this.accumulateMetric(metric, span, statistic, owner, timestamp)
             } else {
