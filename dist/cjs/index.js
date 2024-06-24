@@ -94,6 +94,9 @@ class CustomMetrics {
         if (value == undefined || value == null) {
             throw new Error('Invalid metric value');
         }
+        if (dimensionsList.length == 0) {
+            dimensionsList = [{}];
+        }
         value = Number(value);
         if (isNaN(value)) {
             throw new Error(`Value to emit is not valid`);
@@ -224,7 +227,13 @@ class CustomMetrics {
     }
     async flushElt(elt) {
         let point = { count: elt.count, sum: elt.sum, timestamp: elt.timestamp };
-        await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions, { timestamp: elt.timestamp });
+        let timestamp = Date.now() / 1000;
+        if (timestamp > elt.timestamp) {
+            timestamp = elt.timestamp;
+        }
+        await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions, {
+            timestamp: timestamp * 1000
+        });
     }
     getBufferKey(namespace, metricName, dimensions) {
         return `${namespace}|${metricName}|${JSON.stringify(dimensions)}`;

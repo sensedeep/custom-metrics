@@ -274,6 +274,9 @@ export class CustomMetrics {
         if (value == undefined || value == null) {
             throw new Error('Invalid metric value')
         }
+        if (dimensionsList.length == 0) {
+            dimensionsList = [{}]
+        }
         value = Number(value)
         if (isNaN(value)) {
             throw new Error(`Value to emit is not valid`)
@@ -461,7 +464,15 @@ export class CustomMetrics {
 
     async flushElt(elt: BufferElt) {
         let point = {count: elt.count, sum: elt.sum, timestamp: elt.timestamp}
-        await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions, {timestamp: elt.timestamp})
+
+        //  Choose current time if before the buffer expires, otherwise choose the buffer expiry time
+        let timestamp = Date.now() / 1000
+        if (timestamp > elt.timestamp) {
+            timestamp = elt.timestamp
+        }
+        await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions, {
+            timestamp: timestamp * 1000
+        })
     }
 
     getBufferKey(namespace: string, metricName: string, dimensions: string): string {
