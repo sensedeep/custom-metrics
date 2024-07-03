@@ -17,9 +17,11 @@ CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps.
 
 AWS CloudWatch offers metrics to monitor AWS services and your apps. Unfortunately, custom AWS CloudWatch metrics can be very expensive. If updated or queried regularly, each each custom AWS CloudWatch metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill. This high cost prevents using metrics liberally in your app at scale.
 
-> **CustomMetrics** provides low cost metrics that are much cheaper and faster than standard AWS CloudWatch metrics.
+**CustomMetrics** provides lower cost metrics that are dramatically less expensive and faster than standard AWS CloudWatch metrics.  
+ 
+> CustomMetrics is up to 1000x times less expensive per metric than CloudWatch. 
 
-CustomMetrics achieves dramatic savings by supporting **latest** period metrics. i.e. last day, last month, last hour, last 5 minutes etc. This enables each metric to be saved, stored and queried with minimal cost.
+CustomMetrics achieves these savings by supporting **latest** period metrics. i.e. last day, last month, last hour, last 5 minutes etc. This enables each metric to be saved in a single DynamoDB item, and can be stored and queried fast, with minimal cost.
 
 CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexist with existing application data.
 
@@ -32,7 +34,7 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Computes statistics for: average, min, max, count and sum.
 -   Computes P value statistics with configurable P value resolution.
 -   Supports a default metric intervals of: last 5 mins, hour, day, week, month and year.
--   Supports querying from arbitrary start dates.
+-   Supports querying from arbitrary start dates up to the current time.
 -   Configurable custom intervals for higher or different metric intervals.
 -   Fast and flexible metric query API.
 -   Query API can return data points or aggregate metric data to a single statistic.
@@ -42,6 +44,7 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
 -   Clean, readable, small, TypeScript code base (~1.3K lines).
+-   No external dependencies.
 -   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
 -   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics.
 
