@@ -531,8 +531,8 @@ The span.end marks the time of the most recent data point and is updated wheneve
 
 All feedback, discussion, contributions and bug reports are very welcome.
 
--   [Discussions](https://github.com/sensedeep/CustomMetrics/discussions)
--   [Issues](https://github.com/sensedeep/CustomMetrics/issues)
+-   [Discussions](https://github.com/sensedeep/custom-metrics/discussions)
+-   [Issues](https://github.com/sensedeep/custom-metrics/issues)
 
 ### SenseDeep
 
