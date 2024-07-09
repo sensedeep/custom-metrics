@@ -155,7 +155,7 @@ type BufferElt = {
     dimensions: string
     metric: string
     namespace: string
-    spans: Span[]   //  Persisted spans from when metric is flushed
+    spans: Span[] //  Persisted spans from when metric is flushed
     sum: number
     timestamp: number
     elapsed: number
@@ -339,7 +339,7 @@ export class CustomMetrics {
         let key = this.getBufferKey(namespace, metricName, dimensions)
         let buffers = (this.buffers = this.buffers || {})
         let timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
-        let elapsed = (buffer.elapsed || this.spans[0].period / this.spans[0].samples)
+        let elapsed = buffer.elapsed || this.spans[0].period / this.spans[0].samples
         let elt: BufferElt = (buffers[key] = buffers[key] || {
             count: 0,
             sum: 0,
