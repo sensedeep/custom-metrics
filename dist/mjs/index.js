@@ -141,14 +141,20 @@ export class CustomMetrics {
         let key = this.getBufferKey(namespace, metricName, dimensions);
         let buffers = (this.buffers = this.buffers || {});
         let timestamp = Math.floor((options.timestamp || Date.now()) / 1000);
+        let elapsed = (buffer.elapsed || this.spans[0].period / this.spans[0].samples);
         let elt = (buffers[key] = buffers[key] || {
             count: 0,
             sum: 0,
-            timestamp: timestamp + (buffer.elapsed || this.spans[0].period / this.spans[0].samples),
+            timestamp: timestamp + elapsed,
+            elapsed: elapsed,
             namespace: namespace,
             metric: metricName,
             dimensions,
+            spans: [{ points: [{ count: 0, sum: 0 }] }],
         });
+        let current = elt.spans[0].points.at(-1);
+        current.count += point.count;
+        current.sum += point.sum;
         elt.count += point.count;
         elt.sum += point.sum;
         if (buffer.force ||
@@ -156,12 +162,15 @@ export class CustomMetrics {
             (buffer.count && elt.count >= buffer.count) ||
             timestamp >= elt.timestamp) {
             options = Object.assign({}, options, { timestamp: timestamp * 1000 });
-            await this.emitDimensionedMetric(namespace, metricName, elt, dimensions, options);
-            delete buffers[key];
+            let metric = await this.emitDimensionedMetric(namespace, metricName, elt, dimensions, options);
+            elt.count = elt.sum = 0;
+            elt.spans = metric.spans;
+            elt.timestamp = timestamp + (buffer.elapsed || this.spans[0].period / this.spans[0].samples);
+            return metric;
         }
         CustomMetrics.saveInstance({ key }, this);
         return {
-            spans: [{ points: [{ count: elt.count, sum: elt.sum }] }],
+            spans: elt.spans,
             metric: metricName,
             namespace: namespace,
             owner: options.owner || this.owner,
@@ -231,17 +240,19 @@ export class CustomMetrics {
         for (let elt of Object.values(this.buffers)) {
             await this.flushElt(elt);
         }
-        this.buffers = null;
     }
     async flushElt(elt) {
-        let point = { count: elt.count, sum: elt.sum, timestamp: elt.timestamp };
-        let timestamp = Date.now() / 1000;
+        let now = Date.now() / 1000;
+        let timestamp = now;
         if (timestamp > elt.timestamp) {
             timestamp = elt.timestamp;
         }
-        await this.emitDimensionedMetric(elt.namespace, elt.metric, point, elt.dimensions, {
-            timestamp: timestamp * 1000
+        let metric = await this.emitDimensionedMetric(elt.namespace, elt.metric, elt, elt.dimensions, {
+            timestamp: timestamp * 1000,
         });
+        elt.count = elt.sum = 0;
+        elt.spans = metric.spans;
+        elt.timestamp = now + (elt.elapsed || this.spans[0].period / this.spans[0].samples);
     }
     getBufferKey(namespace, metricName, dimensions) {
         return `${namespace}|${metricName}|${JSON.stringify(dimensions)}`;
@@ -262,7 +273,7 @@ export class CustomMetrics {
         }
         let span;
         if (options.start) {
-            span = metric.spans.find((s) => (s.end - s.period) <= options.start / 1000);
+            span = metric.spans.find((s) => s.end - s.period <= options.start / 1000);
             if (!span) {
                 span = metric.spans[metric.spans.length - 1];
                 period = span.period;

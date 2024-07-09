@@ -106,8 +106,10 @@ type BufferElt = {
     dimensions: string;
     metric: string;
     namespace: string;
+    spans: Span[];
     sum: number;
     timestamp: number;
+    elapsed: number;
 };
 export declare class CustomMetrics {
     private consistent;
