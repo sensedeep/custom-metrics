@@ -111,3 +111,23 @@ test('Test stale buffered data', async () => {
     expect(r).toBeDefined()
     expect(r.points[0].value).toBe(7)
 })
+
+
+test('Buffered metric return', async () => {
+    let metrics = new CustomMetrics({client, table, log: true})
+    let timestamp = new Date(2000, 0, 1).getTime()
+    let interval = 1
+
+    for (let i = 0; i < 5; i++) {
+        let metric = await metrics.emit('test/buffer', 'ReturnMetric', 1, [], {
+            buffer: {sum: 5}, timestamp
+        })
+        if (i < 4) {
+            expect(metric).toBeDefined()
+            expect(metric.spans.length).toBe(1)
+        } else {
+            expect(metric.spans.length).toBe(6)
+        }
+        timestamp += interval * 1000
+    }
+})
