@@ -133,6 +133,7 @@ export type MetricEmitOptions = {
     owner?: string
     timestamp?: number
     ttl?: number
+    upgrade?: boolean
 }
 
 export type MetricListOptions = {
@@ -407,7 +408,11 @@ export class CustomMetrics {
         do {
             let owner = options.owner || this.owner
             metric = await this.getMetric(owner, namespace, metricName, dimensions, options.log)
-            if (!metric) {
+            if (metric) {
+                if (options.upgrade) {
+                    metric = this.upgradeMetric(metric)
+                }
+            } else {
                 metric = this.initMetric(owner, namespace, metricName, dimensions, timestamp)
             }
             if (point.timestamp) {
@@ -459,6 +464,69 @@ export class CustomMetrics {
             /* istanbul ignore next */
             await this.delay(this.jitter(backoff))
         } while (retries-- > 0)
+        return metric
+    }
+
+    /*
+        Upgrade a metric with new spans. Only the specified dimensions are upgraded.
+     */
+    async upgrade(
+        namespace: string,
+        metricName: string,
+        dimensionsList: MetricDimensionsList = [{}],
+        options: MetricEmitOptions = {}
+    ): Promise<Metric> {
+        let owner = options.owner || this.owner
+        if (dimensionsList.length == 0) {
+            dimensionsList = [{}]
+        }
+        let metric
+        for (let dim of dimensionsList) {
+            let dimensions = this.makeDimensionString(dim)
+            let old = await this.getMetric(owner, namespace, metricName, dimensions, options.log)
+            metric = this.upgradeMetric(old)
+        }
+        return metric
+    }
+
+    /*
+        Upgrade a metric and return the upgraded result
+        Optimized for when an upgrade is not required.
+     */          
+    upgradeMetric(old: Metric): Metric {
+        let required = false
+        /*
+            Check if upgrade required
+         */
+        if (this.spans.length == old.spans.length) {
+            for (let [index, span] of Object.entries(old.spans)) {
+                if (span.period != this.spans[index].period || 
+                    span.samples != this.spans[index].samples) {
+                    required = true
+                }
+            }
+            if (!required) {
+                return old
+            }
+        }
+        /*
+            This initializes a new metric with the new spans and apportions all the old data points
+            to the new metric at the point's timestamp
+         */
+        let timestamp = old.spans[0].end || Math.floor(Date.now() / 1000)
+        let metric = this.initMetric(old.owner, old.namespace, old.metric, old.dimensions, timestamp)
+        for (let span of old.spans) {
+            let interval = span.period / span.samples
+            let timestamp = span.end - (span.points.length * interval)
+            /*
+                Pick the first span for which the point is after the earliest span start or after the end of the span
+            */
+            let si = metric.spans.findIndex((s) => s.end - s.period <= timestamp || s.end <= timestamp)
+            for (let point of span.points) {
+                this.addValue(metric, timestamp, point, si)
+                timestamp += interval
+            }
+        } 
         return metric
     }
 

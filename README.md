@@ -13,6 +13,8 @@
 
 CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps. 
 
+It provides more efficient, scalable metrics that are dramatically less expensive and faster than standard AWS CloudWatch metrics. 
+
 ## Background
 
 AWS CloudWatch offers metrics to monitor AWS services and your apps. Unfortunately, custom AWS CloudWatch metrics can be very expensive. If updated or queried regularly, each each custom AWS CloudWatch metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill. This high cost prevents using metrics liberally in your app at scale.
@@ -45,8 +47,8 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Written in TypeScript with full TypeScript support.
 -   Clean, readable, small, TypeScript code base (~1.3K lines).
 -   No external dependencies.
--   [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
--   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics.
+-   Use [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
+-   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics. [EmbedThis Ioto](https://www.embedthis.com/) uses CustomMetrics for IoT metrics.
 
 ![Dark Mode](./doc/dashboard-dark.avif)
 
@@ -269,7 +271,7 @@ const metrics = new CustomMetrics({
 
 CustomMetric spans define how each metric is processed and aged. The spans are an ordered list of metric interval periods. 
 
-The default spans store statistics for the periods: 5 minutes, 1 hour, 1 day, 1 week, 1 month and 1 year. 
+The default spans will store statistics for the periods: 5 minutes, 1 hour, 1 day, 1 week, 1 month and 1 year. 
 
 Via the `spans` CustomMetrics constructor you can provide an alternate list of spans for higher, lower or more granular resolution.
 
@@ -304,9 +306,15 @@ const metrics = new CustomMetrics({
 
 #### Upgrading Metric Spans
 
-If you want to change your spans in the future, you can upgrade your metric data with new spans. To do this, you can use the `upgrade` method. This will apportion data points from the old spans to the new spans. If the number of samples in a span is increased, the data points will be apportioned across the new span.
+If you want to change your spans in the future, you can upgrade your metric data with new spans. To do this, you can use the `upgrade` method. This will apportion data points from the old spans to the new spans based on the point's timestamp. The **upgrade** call takes the namespace, metric name and specific dimensions to upgrade. 
 
-WARNING: if you define new spans via the constructor and do not call upgrade, the results may be unpredictable. If you do upgrade your metrics, ensure you supply the new span definition to all your constructor calls going forward. Otherwise, the default spans will be used.
+You can also upgrade metrics by providing an **upgrade: true** parameter to the emit calls.
+
+If you define new spans via the constructor and do not call upgrade, your new metrics will use the new spans and the old metrics will utilize the old spans. Query will still work, and CustomMetrics will return metrics according to the spans in use when the metric was first created. 
+
+The **upgrade** API and emit **upgrade** option are idempotent in that there is no ill effects from upgrading a metric that is already upgraded. The emit call will only upgrade if an upgrade is required.
+
+If you do use custom span definitions, ensure you supply the custom span definition to all your constructor calls going forward. Otherwise, the default spans will be used for any new metrics.
 
 ```typescript
 const metrics = new CustomMetrics({
@@ -319,7 +327,13 @@ const metrics = new CustomMetrics({
         {period: 365 * 24 * 60 * 60, samples: 48},
     ]
 })
-await metrics.upgrade()
+await metrics.upgrade('Acme/Metrics', 'launches', 
+    [{}, {rocket: 'saturnV'}, {mission: 'ISS-service'}])
+
+// or
+await metrics.emit('Acme/Metrics', 'launches', 5,
+    [{}, {rocket: 'saturnV'}, {mission: 'ISS-service'}])
+
 ```
 
 ## Logging
