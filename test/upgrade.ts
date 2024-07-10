@@ -41,6 +41,7 @@ test('Upgrade Spans', async () => {
     //  Test upgrade
     metrics = new CustomMetrics({client, table, log: true, spans: MoreSpans})
     metric = await metrics.upgrade('test/upgrade', 'UpMetric', [])
+    dump(metric)
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(9)
     expect(metric.spans[0].points.length).toBe(0)
