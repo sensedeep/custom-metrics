@@ -1,4 +1,4 @@
-import {CustomMetrics, DefaultSpans, MetricQueryResult} from '../../src/index'
+import {CustomMetrics, DefaultSpans, MetricQueryResult, SpanDef} from '../../src/index'
 import SenseLogs from 'senselogs'
 
 const log = new SenseLogs({destination: 'stdout', format: 'human'})
@@ -53,4 +53,4 @@ const delay = async (time: number) => {
     })
 }
 
-export {table, client, CustomMetrics, DefaultSpans, delay, dump, dumpMetrics, log, print}
+export {table, client, CustomMetrics, DefaultSpans, SpanDef, delay, dump, dumpMetrics, log, print}

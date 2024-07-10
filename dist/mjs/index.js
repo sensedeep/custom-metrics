@@ -141,7 +141,7 @@ export class CustomMetrics {
         let key = this.getBufferKey(namespace, metricName, dimensions);
         let buffers = (this.buffers = this.buffers || {});
         let timestamp = Math.floor((options.timestamp || Date.now()) / 1000);
-        let elapsed = (buffer.elapsed || this.spans[0].period / this.spans[0].samples);
+        let elapsed = buffer.elapsed || this.spans[0].period / this.spans[0].samples;
         let elt = (buffers[key] = buffers[key] || {
             count: 0,
             sum: 0,
@@ -187,7 +187,12 @@ export class CustomMetrics {
         do {
             let owner = options.owner || this.owner;
             metric = await this.getMetric(owner, namespace, metricName, dimensions, options.log);
-            if (!metric) {
+            if (metric) {
+                if (options.upgrade) {
+                    metric = this.upgradeMetric(metric);
+                }
+            }
+            else {
                 metric = this.initMetric(owner, namespace, metricName, dimensions, timestamp);
             }
             if (point.timestamp) {
@@ -222,6 +227,33 @@ export class CustomMetrics {
             this.log[chan](`Retry backoff ${backoff} ${this.jitter(backoff)}`);
             await this.delay(this.jitter(backoff));
         } while (retries-- > 0);
+        return metric;
+    }
+    async upgrade(namespace, metricName, dimensionsList = [{}], options = {}) {
+        let owner = options.owner || this.owner;
+        if (dimensionsList.length == 0) {
+            dimensionsList = [{}];
+        }
+        let metric;
+        for (let dim of dimensionsList) {
+            let dimensions = this.makeDimensionString(dim);
+            let old = await this.getMetric(owner, namespace, metricName, dimensions, options.log);
+            metric = this.upgradeMetric(old);
+        }
+        return metric;
+    }
+    upgradeMetric(old) {
+        let timestamp = old.spans[0].end || Math.floor(Date.now() / 1000);
+        let metric = this.initMetric(old.owner, old.namespace, old.metric, old.dimensions, timestamp);
+        for (let span of old.spans) {
+            let interval = span.period / span.samples;
+            let timestamp = span.end - (span.points.length * interval);
+            let si = metric.spans.findIndex((s) => s.end - s.period <= timestamp || s.end <= timestamp);
+            for (let point of span.points) {
+                this.addValue(metric, timestamp, point, si);
+                timestamp += interval;
+            }
+        }
         return metric;
     }
     static async terminate() {
@@ -272,8 +304,10 @@ export class CustomMetrics {
             return { dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0 };
         }
         let span;
-        if (options.start) {
-            span = metric.spans.find((s) => s.end - s.period <= options.start / 1000);
+        let start = options.start;
+        if (start) {
+            start /= 1000;
+            span = metric.spans.find((s) => s.end - s.period <= start);
             if (!span) {
                 span = metric.spans[metric.spans.length - 1];
                 period = span.period;
@@ -289,13 +323,13 @@ export class CustomMetrics {
         this.addValue(metric, timestamp, { count: 0, sum: 0 }, 0, period);
         let result;
         if (metric && span) {
-            if (options.start) {
-                let interval = span.period / span.samples;
-                let end = span.points.length - Math.ceil((span.end - (options.start / 1000 + period)) / interval);
-                let front = end - Math.round(period / interval);
-                span.end -= (span.points.length - end) * interval;
-                span.points = span.points.slice(front, end);
+            if (!start) {
+                start = span.end - period;
             }
+            let interval = span.period / span.samples;
+            let count = Math.ceil(period / interval);
+            let index = span.points.length - (span.end - start) / interval;
+            span.points = span.points.slice(index, index + count);
             if (options.accumulate) {
                 result = this.accumulateMetric(metric, span, statistic, owner, timestamp);
             }

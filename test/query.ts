@@ -1,7 +1,7 @@
 /*
     query.ts - Test metric query
  */
-import {client, table, CustomMetrics, DefaultSpans} from './utils/init'
+import {client, table, CustomMetrics, DefaultSpans, dump} from './utils/init'
 
 // jest.setTimeout(7200 * 1000)
 
@@ -41,7 +41,7 @@ test('Test query period', async () => {
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[0].period)
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(10)
+    expect(r.points.length).toBe(1)
     expect(r.points[0].value).toBe(7)
     expect(r.points[0].count).toBe(1)
 
@@ -178,4 +178,29 @@ test('Test missing metrics', async () => {
     //  Missing span, but still return data point
     r = await metrics.query('test/query', 'MMetric', {}, 86400, 'avg')
     expect(r.points.length).toBe(1)
+})
+
+
+test('Test query with non-standard period', async () => {
+    let metrics = new CustomMetrics({client, table, log: false})
+
+    let timestamp = new Date(2000, 0, 1).getTime()
+    let metric
+    for (let i = 0; i < 140; i++) {
+        metric = await metrics.emit('test/query', 'BasicMetric', 7, [], {timestamp})
+        timestamp += 30 * 1000
+    }
+    expect(metric.spans[0].points.length).toBe(10)
+
+    /*
+        Query 15 minutes
+        This will return 3 points from the next span up (1 hr)
+     */
+    let r = await metrics.query('test/query', 'BasicMetric', {}, 900, 'sum', {timestamp})
+    expect(r).toBeDefined()
+    expect(r.period).toBe(DefaultSpans[1].period)
+    expect(r.points).toBeDefined()
+    expect(r.points.length).toBe(3)
+    expect(r.points[0].value).toBe(70)
+    expect(r.points[0].count).toBe(10)
 })

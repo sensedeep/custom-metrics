@@ -1,5 +1,5 @@
 import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
-type SpanDef = {
+export type SpanDef = {
     period: number;
     samples: number;
 };
@@ -87,6 +87,7 @@ export type MetricEmitOptions = {
     owner?: string;
     timestamp?: number;
     ttl?: number;
+    upgrade?: boolean;
 };
 export type MetricListOptions = {
     log?: boolean;
@@ -134,6 +135,8 @@ export declare class CustomMetrics {
     private emitDimensions;
     bufferMetric(namespace: string, metricName: string, point: Point, dimensions: string, options: MetricEmitOptions): Promise<Metric>;
     private emitDimensionedMetric;
+    upgrade(namespace: string, metricName: string, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;
+    upgradeMetric(old: Metric): Metric;
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
     flush(): Promise<void>;

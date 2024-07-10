@@ -22,7 +22,7 @@ const MaxSeq = Number.MAX_SAFE_INTEGER // Maximum sequence number for collision 
 const MaxRetries = 10 // Max retries when emitting a metric and encountering collisions
 const MetricListLimit = 10000
 
-type SpanDef = {
+export type SpanDef = {
     period: number // Span's total timespan
     samples: number // Number of data points in period
 }
@@ -602,11 +602,13 @@ export class CustomMetrics {
             return {dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
         let span
-        if (options.start) {
+        let start = options.start
+        if (start) {
             /*
                 Map the period that encompasses the start
              */
-            span = metric.spans.find((s) => s.end - s.period <= options.start / 1000)
+            start /= 1000
+            span = metric.spans.find((s) => s.end - s.period <= start)
             if (!span) {
                 span = metric.spans[metric.spans.length - 1]
                 period = span.period
@@ -632,13 +634,17 @@ export class CustomMetrics {
 
         /* istanbul ignore else */
         if (metric && span) {
-            if (options.start) {
-                let interval = span.period / span.samples
-                let end = span.points.length - Math.ceil((span.end - (options.start / 1000 + period)) / interval)
-                let front = end - Math.round(period / interval)
-                span.end -= (span.points.length - end) * interval
-                span.points = span.points.slice(front, end)
+            if (!start) {
+                start = span.end - period
             }
+            /*
+                Return the last N points matching the request period for the span
+             */
+            let interval = span.period / span.samples
+            let count = Math.ceil(period / interval)
+            let index = span.points.length - (span.end - start) / interval
+            span.points = span.points.slice(index, index + count)
+
             if (options.accumulate) {
                 result = this.accumulateMetric(metric, span, statistic, owner, timestamp)
             } else {
