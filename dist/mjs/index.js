@@ -239,10 +239,23 @@ export class CustomMetrics {
             let dimensions = this.makeDimensionString(dim);
             let old = await this.getMetric(owner, namespace, metricName, dimensions, options.log);
             metric = this.upgradeMetric(old);
+            await this.putMetric(metric, options);
         }
         return metric;
     }
     upgradeMetric(old) {
+        let required = false;
+        if (this.spans.length == old.spans.length) {
+            for (let [index, span] of Object.entries(old.spans)) {
+                if (span.period != this.spans[index].period ||
+                    span.samples != this.spans[index].samples) {
+                    required = true;
+                }
+            }
+            if (!required) {
+                return old;
+            }
+        }
         let timestamp = old.spans[0].end || Math.floor(Date.now() / 1000);
         let metric = this.initMetric(old.owner, old.namespace, old.metric, old.dimensions, timestamp);
         for (let span of old.spans) {

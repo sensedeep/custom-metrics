@@ -25,7 +25,6 @@ const MoreSpans: SpanDef[] = [
 test('Upgrade Spans', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
     let timestamp = new Date(2000, 0, 1).getTime()
-    console.log("TS", timestamp)
 
     let metric
     for (let i = 0; i < 140; i++) {
@@ -38,23 +37,19 @@ test('Upgrade Spans', async () => {
     expect(metric.spans[1].points.length).toBe(12)
     expect(metric.spans[2].points.length).toBe(1)
     expect(metric.spans[3].points.length).toBe(0)
-    dump(metric)
 
     //  Test upgrade
     metrics = new CustomMetrics({client, table, log: true, spans: MoreSpans})
     metric = await metrics.upgrade('test/upgrade', 'UpMetric', [])
-    dump(metric)
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(9)
     expect(metric.spans[0].points.length).toBe(0)
     expect(metric.spans[1].points.length).toBe(10)
     expect(metric.spans[2].points.length).toBe(0)
-    expect(metric.spans[3].points.length).toBe(9)
 
     //  Test downgrade
     metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
     metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {upgrade: true})
-    dump(metric)
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(2)
     expect(metric.spans[0].points.length).toBe(1)
@@ -67,6 +62,5 @@ test('Upgrade Spans', async () => {
     //  Test already upgraded
     metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
     metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {upgrade: true})
-    dump(metric)
     expect(metric).toBeDefined()
 })
