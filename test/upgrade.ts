@@ -37,6 +37,7 @@ test('Upgrade Spans', async () => {
     expect(metric.spans[1].points.length).toBe(12)
     expect(metric.spans[2].points.length).toBe(1)
     expect(metric.spans[3].points.length).toBe(0)
+    dump(metric)
 
     //  Test upgrade
     metrics = new CustomMetrics({client, table, log: true, spans: MoreSpans})
@@ -52,6 +53,7 @@ test('Upgrade Spans', async () => {
     //  Test downgrade
     metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
     metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {upgrade: true})
+    dump(metric)
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(2)
     expect(metric.spans[0].points.length).toBe(1)
@@ -64,5 +66,6 @@ test('Upgrade Spans', async () => {
     //  Test already upgraded
     metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
     metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {upgrade: true})
+    dump(metric)
     expect(metric).toBeDefined()
 })

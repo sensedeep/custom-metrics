@@ -485,6 +485,7 @@ export class CustomMetrics {
             let dimensions = this.makeDimensionString(dim)
             let old = await this.getMetric(owner, namespace, metricName, dimensions, options.log)
             metric = this.upgradeMetric(old)
+            await this.putMetric(metric, options)
         }
         return metric
     }
