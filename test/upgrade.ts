@@ -25,6 +25,7 @@ const MoreSpans: SpanDef[] = [
 test('Upgrade Spans', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
     let timestamp = new Date(2000, 0, 1).getTime()
+    console.log("TS", timestamp)
 
     let metric
     for (let i = 0; i < 140; i++) {
