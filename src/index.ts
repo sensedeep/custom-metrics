@@ -140,6 +140,7 @@ export type MetricListOptions = {
     log?: boolean
     limit?: number
     owner?: string
+    next?: object
 }
 
 export type MetricQueryOptions = {
@@ -987,11 +988,12 @@ export class CustomMetrics {
     ): Promise<MetricList> {
         let map = {} as any
         let owner = options.owner || this.owner
-        let next: object | undefined
+        let next: object | undefined = options.next
         let limit = options.limit || MetricListLimit
         /* istanbul ignore next */
         let chan = options.log == true ? 'info' : 'trace'
         let items, command
+        let count = 0
         do {
             /* istanbul ignore next */
             ;({command, items, next} = await this.findMetrics(owner, namespace, metric, limit, next))
@@ -1002,8 +1004,9 @@ export class CustomMetrics {
                     let met = (ns[item.metric] = ns[item.metric] || [])
                     met.push(item.dimensions)
                 }
+                count += items.length
             }
-        } while (next)
+        } while (next && count < limit)
 
         let result: MetricList = {namespaces: Object.keys(map)}
         if (namespace && map[namespace]) {
