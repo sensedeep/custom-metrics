@@ -550,7 +550,17 @@ All feedback, discussion, contributions and bug reports are very welcome.
 
 ### SenseDeep
 
-[SenseDeep](https://www.sensedeep.com) can be used to view CustomMetrics graphs and data. You can also create alarms and receive alert notifications based on CustomMetric data expressions.
+[SenseDeep](https://www.sensedeep.com) can be used to view CustomMetrics with graphical dashboards and widgets. You can also create alarms and receive alert notifications based on CustomMetric data expressions.
+
+### Blog Articles
+
+Here is a collection of articles that can help you on your way with Custom Metrics
+
+Topic|Link
+-|-
+Intro to Custom Metrics | [https://www.sensedeep.com/blog/posts/stories/custom-metrics.html](https://www.sensedeep.com/blog/posts/stories/custom-metrics.html)
+Custom Metrics with IoT | [https://www.embedthis.com/blog/ioto/ioto-metrics.html](https://www.embedthis.com/blog/ioto/ioto-metrics.html).
+
 
 ### Contact
 
