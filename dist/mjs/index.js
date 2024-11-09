@@ -628,10 +628,11 @@ export class CustomMetrics {
     async getMetricList(namespace = undefined, metric = undefined, options = { limit: MetricListLimit }) {
         let map = {};
         let owner = options.owner || this.owner;
-        let next;
+        let next = options.next;
         let limit = options.limit || MetricListLimit;
         let chan = options.log == true ? 'info' : 'trace';
         let items, command;
+        let count = 0;
         do {
             ;
             ({ command, items, next } = await this.findMetrics(owner, namespace, metric, limit, next));
@@ -642,8 +643,9 @@ export class CustomMetrics {
                     let met = (ns[item.metric] = ns[item.metric] || []);
                     met.push(item.dimensions);
                 }
+                count += items.length;
             }
-        } while (next);
+        } while (next && count < limit);
         let result = { namespaces: Object.keys(map) };
         if (namespace && map[namespace]) {
             result.metrics = Object.keys(map[namespace]);

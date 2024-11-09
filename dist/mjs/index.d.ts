@@ -93,6 +93,7 @@ export type MetricListOptions = {
     log?: boolean;
     limit?: number;
     owner?: string;
+    next?: object;
 };
 export type MetricQueryOptions = {
     accumulate?: boolean;
