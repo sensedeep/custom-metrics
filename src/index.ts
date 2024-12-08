@@ -356,8 +356,10 @@ export class CustomMetrics {
             Add point value to the lowest span and to the elt (to manage when to persist)
          */
         let current = elt.spans[0].points.at(-1)
-        current.count += point.count
-        current.sum += point.sum
+        if (current) {
+            current.count += point.count
+            current.sum += point.sum
+        }
         elt.count += point.count
         elt.sum += point.sum
 
@@ -645,6 +647,9 @@ export class CustomMetrics {
             let interval = span.period / span.samples
             let count = Math.ceil(period / interval)
             let index = span.points.length - (span.end - start) / interval
+            if (index < 0) {
+                index = 0
+            }
             span.points = span.points.slice(index, index + count)
 
             if (options.accumulate) {

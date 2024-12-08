@@ -145,8 +145,10 @@ class CustomMetrics {
             spans: [{ points: [{ count: 0, sum: 0 }] }],
         });
         let current = elt.spans[0].points.at(-1);
-        current.count += point.count;
-        current.sum += point.sum;
+        if (current) {
+            current.count += point.count;
+            current.sum += point.sum;
+        }
         elt.count += point.count;
         elt.sum += point.sum;
         if (buffer.force ||
@@ -334,6 +336,9 @@ class CustomMetrics {
             let interval = span.period / span.samples;
             let count = Math.ceil(period / interval);
             let index = span.points.length - (span.end - start) / interval;
+            if (index < 0) {
+                index = 0;
+            }
             span.points = span.points.slice(index, index + count);
             if (options.accumulate) {
                 result = this.accumulateMetric(metric, span, statistic, owner, timestamp);
