@@ -47,7 +47,6 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Written in TypeScript with full TypeScript support.
 -   Clean, readable, small, TypeScript code base (~1.3K lines).
 -   No external dependencies.
--   Use [SenseDeep](https://www.sensedeep.com) support for visualizing and graphing metrics.
 -   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics. [EmbedThis Ioto](https://www.embedthis.com/) uses CustomMetrics for IoT metrics.
 
 ![Dark Mode](./doc/dashboard-dark.avif)
@@ -547,10 +546,6 @@ All feedback, discussion, contributions and bug reports are very welcome.
 
 -   [Discussions](https://github.com/sensedeep/custom-metrics/discussions)
 -   [Issues](https://github.com/sensedeep/custom-metrics/issues)
-
-### SenseDeep
-
-[SenseDeep](https://www.sensedeep.com) can be used to view CustomMetrics with graphical dashboards and widgets. You can also create alarms and receive alert notifications based on CustomMetric data expressions.
 
 ### Blog Articles
 
