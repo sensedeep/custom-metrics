@@ -140,7 +140,7 @@ let results = await metrics.query('Acme/Metrics', 'speed', {
 }, 86400, 'max')
 ```
 
-This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds).
+This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds). Intervals that have no data will have points set to {count: 0, value: 0, timestamp}.
 
 This will return data like this:
 
@@ -155,6 +155,7 @@ This will return data like this:
         "samples": 10,
         "points": [
             { "value": 24000, "count": 19, "timestamp": 1715298000 },
+            ...
         ]
     }]
 }
