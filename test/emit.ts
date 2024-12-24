@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, log} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Test basic emit', async () => {
     let metrics = new CustomMetrics({client, table, owner: 'service', log: true})
@@ -35,10 +35,11 @@ test('Test basic emit', async () => {
     expect(r.namespace).toBe('test/emit')
     expect(r.period).toBe(300)
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(10)
-    expect(r.points[0].count).toBe(1)
-    expect(r.points[0].timestamp).toBe(timestamp)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-1)?.value).toBe(10)
+    expect(r.points.at(-1)?.count).toBe(1)
+    //  The last point bucket will end at timestamp + interval
+    expect(r.points.at(-1)?.timestamp).toBe(timestamp + 30000)
 })
 
 test('Test emit with dimensions', async () => {
@@ -54,18 +55,18 @@ test('Test emit with dimensions', async () => {
     expect(r).toBeDefined()
     expect(r.dimensions).toBeDefined()
     expect(Object.keys(r.dimensions).length).toBe(0)
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(20)
-    expect(r.points[0].count).toBe(2)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-1)?.value).toBe(20)
+    expect(r.points.at(-1)?.count).toBe(2)
 
     //  Query just one dimension
     r = await metrics.query('test/emit', 'Launches', {Rocket: 'Falcon9'}, 300, 'sum')
     expect(r).toBeDefined()
     expect(r.dimensions).toBeDefined()
     expect(r.dimensions.Rocket).toBe('Falcon9')
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(10)
-    expect(r.points[0].count).toBe(1)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-1)?.value).toBe(10)
+    expect(r.points.at(-1)?.count).toBe(1)
 
     //  Query unknown dimension
     r = await metrics.query('test/emit', 'Launches', {Rocket: 'Starship'}, 300, 'sum')

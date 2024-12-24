@@ -21,14 +21,14 @@ test('Constructor with different owners', async () => {
     let r1 = await m1.query('test/owner', 'Launches', {}, 86400, 'sum')
     expect(r1).toBeDefined()
     expect(r1.owner).toBe('app1')
-    expect(r1.points.length).toBe(1)
-    expect(r1.points[0].value).toBe(5)
+    expect(r1.points.length).toBe(r1.samples)
+    expect(r1.points[11].value).toBe(5)
 
     let r2 = await m2.query('test/owner', 'Launches', {}, 86400, 'sum')
     expect(r2).toBeDefined()
     expect(r2.owner).toBe('service2')
-    expect(r2.points.length).toBe(1)
-    expect(r2.points[0].value).toBe(10)
+    expect(r2.points.length).toBe(r1.samples)
+    expect(r2.points[11].value).toBe(10)
 })
 
 test('Owner with namespaces', async () => {

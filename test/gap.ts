@@ -1,7 +1,7 @@
 /*
     gap.ts - Test gaps in metrics
  */
-import {client, table, CustomMetrics, DefaultSpans} from './utils/init'
+import {client, table, CustomMetrics, DefaultSpans, dumpMetric} from './utils/init'
 
 // jest.setTimeout(7200 * 1000)
 
@@ -18,9 +18,16 @@ test('Test gaps between emit and query', async () => {
     }
     expect(metric.spans[2].points.length).toBe(1)
 
-    timestamp += 5 * 86400 * 1000
     let r = await metrics.query('test/gap', 'GapMetric', {}, 86400, 'sum', {timestamp})
-    expect(r.points.length).toBe(0)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-1)?.count).toBe(20 * span.samples)
+
+    timestamp += 2 * 86400 * 1000
+    r = await metrics.query('test/gap', 'GapMetric', {}, 86400, 'sum', {timestamp})
+    expect(r.points.length).toBe(r.samples)
+    for (let i = 0; i < r.samples; i++) {
+        expect(r.points[i].count).toBe(0)
+    }
 })
 
 test('Test data aging beyond highest span', async () => {
@@ -60,10 +67,42 @@ test('Test predated data', async() => {
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[5].points.length).toBe(0)
 
+    timestamp += 365 * 86400 * 1000
     let r = await metrics.query('test/gap', 'PreDate', {}, 365 * 86400, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(1)
-    expect(r.points[0].count).toBe(1)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points[0].value).toBe(0)
+    expect(r.points[11].count).toBe(1)
+})
+
+
+test('Test that points before data and after data are filled', async () => {
+    let metrics = new CustomMetrics({client, table})
+    let timestamp = new Date(2000, 0, 1).getTime() + 10 * 3600 * 1000
+
+    //  Use the hour span
+    let span = DefaultSpans[1]
+    let interval = span.period / span.samples
+
+    //  Emit two data values separated by point gaps
+    let metric = await metrics.emit('test/gap', 'FillMetric', 10, [], {timestamp})
+    timestamp += 2 * interval * 1000
+    expect(metric.spans[0].points.length).toBe(1)
+    expect(metric.spans[0].points[0].sum).toBe(10)
+    expect(metric.spans[1].points.length).toBe(0)
+
+    metric = await metrics.emit('test/gap', 'FillMetric', 20, [], {timestamp})
+
+    expect(metric.spans[0].points.length).toBe(1)
+    expect(metric.spans[0].points[0].sum).toBe(20)
+    expect(metric.spans[1].points.length).toBe(1)
+    expect(metric.spans[1].points[0].sum).toBe(10)
+
+    //  Move time on by 4 intervals
+    timestamp += 4 * interval * 1000
+    let r = await metrics.query('test/gap', 'FillMetric', {}, 3600, 'sum', {timestamp})
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-5)?.value).toBe(20)
+    expect(r.points.at(-7)?.value).toBe(10)
 })

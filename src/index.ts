@@ -15,12 +15,12 @@ import {
 import {marshall, unmarshall} from '@aws-sdk/util-dynamodb'
 
 const Version = 1
-const Assert = true
-const Buffering = true
+const Assert = true // Enable asserts
+const Buffering = true // Enable buffered metrics
 const DefaultResolution = 0 // Default number of p-values to store
 const MaxSeq = Number.MAX_SAFE_INTEGER // Maximum sequence number for collision detection
 const MaxRetries = 10 // Max retries when emitting a metric and encountering collisions
-const MetricListLimit = 10000
+const MetricListLimit = 10000 // Sanity limit for getting a list of metrics
 
 export type SpanDef = {
     period: number // Span's total timespan
@@ -43,11 +43,11 @@ export type Metric = {
     dimensions: string // Comma separated list of key=value dimensions
     expires?: number // Date in seconds when the item expires since Jan 1, 1970
     id?: string // User ID preserved across queries
-    metric: string
-    namespace: string
+    metric: string // Metric name
+    namespace: string // Namespace name
     owner?: string // Tenant owner of the metric
-    version?: number
-    spans: Span[]
+    version?: number // Version of this module
+    spans: Span[] // Data point spans
     seq?: number // Atomic writing serialization vector
     //  Useful when using streams to filter out items with this attribute
     _source?: string
@@ -59,15 +59,21 @@ export type Point = {
     min?: number
     pvalues?: number[]
     sum: number //  Aggregated values
-    //  Never stored
-    timestamp?: number
+    timestamp?: number // Never stored
 }
 
+/*
+    A span holds the points for a time span period
+    The span.end is one beyond the time of the last possible sample in a points[] bucket. 
+    When the span is created, the span.end is set in the future to timestamp + span.interval
+    When querying, we often want to return the most recent data points of a span that may not yet 
+    be full, i.e. the span.end may be in the future.  
+ */
 export type Span = {
-    end: number
-    period: number
-    samples: number
-    points: Point[]
+    end: number //  Timestamp when the span is complete
+    period: number //  Span period in seconds
+    samples: number //  Number of samples in this span
+    points: Point[] //  Data points {count, sum, max, min}
 }
 /*
     Dimensions are an object of dimension:value properties. 
@@ -123,8 +129,8 @@ export type MetricOptions = {
 export type MetricBufferOptions = {
     sum?: number
     count?: number
-    elapsed?: number // Elapsed time in seconds
-    force?: boolean
+    elapsed?: number // Time in seconds to buffer values
+    force?: boolean //  Force a flush
 }
 
 export type MetricEmitOptions = {
@@ -153,14 +159,14 @@ export type MetricQueryOptions = {
 }
 
 type BufferElt = {
-    count: number
-    dimensions: string
-    metric: string
-    namespace: string
+    count: number //  Number of samples
+    dimensions: string //  Dimensions for element
+    metric: string //  Metric for element
+    namespace: string //  Namespace for element
     spans: Span[] //  Persisted spans from when metric is flushed
-    sum: number
-    timestamp: number
-    elapsed: number
+    sum: number //  Sum of samples
+    timestamp: number // Timestamp of when buffered element should be flushed
+    elapsed: number //  Elapsed time to buffer element
 }
 type BufferMap = {
     [key: string]: BufferElt
@@ -496,7 +502,7 @@ export class CustomMetrics {
     /*
         Upgrade a metric and return the upgraded result
         Optimized for when an upgrade is not required.
-     */          
+     */
     upgradeMetric(old: Metric): Metric {
         let required = false
         /*
@@ -504,8 +510,7 @@ export class CustomMetrics {
          */
         if (this.spans.length == old.spans.length) {
             for (let [index, span] of Object.entries(old.spans)) {
-                if (span.period != this.spans[index].period || 
-                    span.samples != this.spans[index].samples) {
+                if (span.period != this.spans[index].period || span.samples != this.spans[index].samples) {
                     required = true
                 }
             }
@@ -514,14 +519,14 @@ export class CustomMetrics {
             }
         }
         /*
-            This initializes a new metric with the new spans and apportions all the old data points
-            to the new metric at the point's timestamp
+            This initializes a new metric with the new spans and apportion the old data points to 
+            the new metric at the point's timestamp. Pick the earliest timestamp from the old metric.
          */
-        let timestamp = old.spans[0].end || Math.floor(Date.now() / 1000)
+        let timestamp = Math.min(...old.spans.map((span) => span.end - span.period)) || Math.floor(Date.now() / 1000)
         let metric = this.initMetric(old.owner, old.namespace, old.metric, old.dimensions, timestamp)
         for (let span of old.spans) {
             let interval = span.period / span.samples
-            let timestamp = span.end - (span.points.length * interval)
+            let timestamp = span.end - span.points.length * interval
             /*
                 Pick the first span for which the point is after the earliest span start or after the end of the span
             */
@@ -530,7 +535,7 @@ export class CustomMetrics {
                 this.addValue(metric, timestamp, point, si)
                 timestamp += interval
             }
-        } 
+        }
         return metric
     }
 
@@ -551,24 +556,21 @@ export class CustomMetrics {
 
     async flush() {
         if (!this.buffers) return
+        let now = Date.now() / 1000
         for (let elt of Object.values(this.buffers)) {
-            await this.flushElt(elt)
+            await this.flushElt(elt, now)
         }
     }
 
-    async flushElt(elt: BufferElt) {
-        //  Choose current time if before the buffer expires, otherwise choose the buffer expiry time
-        let now = Date.now() / 1000
-        let timestamp = now
-        if (timestamp > elt.timestamp) {
-            timestamp = elt.timestamp
-        }
+    async flushElt(elt: BufferElt, timestamp: number) {
+        //  Choose timestamp if before the buffer expires, otherwise choose the buffer expiry time
+        elt.timestamp = Math.min(timestamp, elt.timestamp)
         let metric = await this.emitDimensionedMetric(elt.namespace, elt.metric, elt, elt.dimensions, {
-            timestamp: timestamp * 1000,
+            timestamp: elt.timestamp * 1000,
         })
         elt.count = elt.sum = 0
         elt.spans = metric.spans
-        elt.timestamp = now + (elt.elapsed || this.spans[0].period / this.spans[0].samples)
+        elt.timestamp = timestamp + (elt.elapsed || this.spans[0].period / this.spans[0].samples)
     }
 
     getBufferKey(namespace: string, metricName: string, dimensions: string): string {
@@ -597,7 +599,7 @@ export class CustomMetrics {
         if (this.buffers) {
             let key = this.getBufferKey(namespace, metricName, dimString)
             if (this.buffers[key]) {
-                await this.flushElt(this.buffers[key])
+                await this.flushElt(this.buffers[key], timestamp)
             }
         }
 
@@ -617,6 +619,7 @@ export class CustomMetrics {
                 span = metric.spans[metric.spans.length - 1]
                 period = span.period
             }
+            timestamp = start + period
         } else {
             /*
                 Map the period to the closest span that has a period equal or larger.
@@ -638,7 +641,9 @@ export class CustomMetrics {
 
         /* istanbul ignore else */
         if (metric && span) {
-            if (!start) {
+            if (start) {
+                span.end = this.getTimestamp(span, timestamp)
+            } else {
                 start = span.end - period
             }
             /*
@@ -646,7 +651,7 @@ export class CustomMetrics {
              */
             let interval = span.period / span.samples
             let count = Math.ceil(period / interval)
-            let index = span.points.length - (span.end - start) / interval
+            let index = Math.floor(span.points.length - (span.end - start) / interval)
             if (index < 0) {
                 index = 0
             }
@@ -759,6 +764,7 @@ export class CustomMetrics {
     /*
         Process the metric points. This is used for graphs that need all the data points.
         This calculates the avg, max, min, sum, count, pvalues and per-point timestamps.
+        This always returns a full series of points even if there is no data.
      */
     private calculateSeries(
         metric: Metric,
@@ -769,50 +775,76 @@ export class CustomMetrics {
     ): MetricQueryResult {
         let points: MetricQueryPoint[] = []
         let interval = span.period / span.samples
-
-        let start = span.end - span.points.length * interval
         let value: number = undefined
-        let i = 0
-        for (let point of span.points) {
-            /* istanbul ignore else */
-            if (point.count > 0) {
-                if (statistic == 'max') {
-                    if (point.max != undefined) {
-                        if (value == undefined) {
-                            value = point.max
-                        } else {
-                            value = Math.max(value, point.max)
+
+        /*
+            The span.end may be in the future as the span.point[] may not yet be full. 
+            Round up the timestamp so we include the most recent point[]
+         */
+        timestamp = this.getTimestamp(span, timestamp)
+
+        /*
+            Add filler points prior to real data
+            Note: span.end may be after the timestamp
+         */
+        let t = timestamp - span.samples * interval
+        let start = span.end - span.points.length * interval
+        while (t < start && t < timestamp) {
+            let when = Math.min(t, timestamp)
+            points.push({value: 0, count: 0, timestamp: when * 1000})
+            t += interval
+        }
+        if (t < timestamp) {
+            for (let point of span.points) {
+                /* istanbul ignore else */
+                if (point.count > 0) {
+                    if (statistic == 'max') {
+                        if (point.max != undefined) {
+                            if (value == undefined) {
+                                value = point.max
+                            } else {
+                                value = Math.max(value, point.max)
+                            }
                         }
-                    }
-                } else if (statistic == 'min') {
-                    if (point.min != undefined) {
-                        if (value == undefined) {
-                            value = point.min
-                        } else {
-                            value = Math.min(value, point.min)
+                    } else if (statistic == 'min') {
+                        if (point.min != undefined) {
+                            if (value == undefined) {
+                                value = point.min
+                            } else {
+                                value = Math.min(value, point.min)
+                            }
                         }
+                    } else if (statistic == 'sum') {
+                        value = point.sum
+                    } else if (statistic == 'count') {
+                        value = point.count
+                    } else if (statistic.match(/^p[0-9]+/)) {
+                        let p = parseInt(statistic.slice(1))
+                        let pvalues = point.pvalues
+                        pvalues.sort((a, b) => a - b)
+                        let nth = Math.min(Math.round((pvalues.length * p) / 100 + 1), pvalues.length - 1)
+                        value = pvalues[nth]
+                    } /* avg | current */ else {
+                        value = point.sum / point.count
                     }
-                } else if (statistic == 'sum') {
-                    value = point.sum
-                } else if (statistic == 'count') {
-                    value = point.count
-                } else if (statistic.match(/^p[0-9]+/)) {
-                    let p = parseInt(statistic.slice(1))
-                    let pvalues = point.pvalues
-                    pvalues.sort((a, b) => a - b)
-                    let nth = Math.min(Math.round((pvalues.length * p) / 100 + 1), pvalues.length - 1)
-                    value = pvalues[nth]
-                } /* avg | current */ else {
-                    value = point.sum / point.count
+                } else {
+                    value = 0
                 }
-            } else {
-                value = 0
+                if (t < timestamp) {
+                    //  Want timestamp to be the end of the point bucket not the start
+                    let when = Math.min(t + interval, timestamp)
+                    points.push({value, count: point.count, timestamp: when * 1000})
+                }
+                t += interval
             }
-            //  Want timestamp to be the end of the point bucket
-            start += interval
-            start = Math.min(start, timestamp)
-            points.push({value, count: point.count, timestamp: start * 1000})
-            i++
+        }
+        /*
+            Add filler points after the last real data
+         */
+        while (t < timestamp) {
+            let when = Math.min(t, timestamp)
+            points.push({value: 0, count: 0, timestamp: when * 1000})
+            t += interval
         }
         return {
             dimensions: this.makeDimensionObject(metric.dimensions),
@@ -913,22 +945,31 @@ export class CustomMetrics {
             return
         }
         if (point.count) {
+            let index
             if (points.length == 0) {
-                start = span.end = this.getTimestamp(span, timestamp)
-            }
-            if (timestamp < span.end - span.period) {
-                //  Discard if before the earliest possible point for the span
-                return
-            }
-            while (timestamp < start) {
-                points.unshift({count: 0, sum: 0})
-                start -= interval
-            }
-            while (timestamp >= span.end) {
                 points.push({count: 0, sum: 0})
-                span.end += interval
+                /*
+                    Try to keep span.end == timestamp if possible so that when aggregating lower spans
+                    we keep their span.end if it aligns for the target span
+                 */
+                span.end = this.getTimestamp(span, timestamp)
+                start = span.end - interval
+                index = 0
+            } else {
+                if (timestamp < span.end - span.period) {
+                    //  Discard if before the earliest possible point for the span
+                    return
+                }
+                while (timestamp < start) {
+                    points.unshift({count: 0, sum: 0})
+                    start -= interval
+                }
+                while (timestamp >= span.end) {
+                    points.push({count: 0, sum: 0})
+                    span.end += interval
+                }
+                index = Math.floor((timestamp - start) / interval)
             }
-            let index = Math.floor((timestamp - start) / interval)
             this.assert(points.length <= span.samples)
 
             if (!(0 <= index && index < points.length)) {
@@ -1269,11 +1310,12 @@ export class CustomMetrics {
     }
 
     /*
-        Get a rounded timestamp in seconds
+        Get a rounded up timestamp in seconds
+        Note: this may be in the future
      */
     private getTimestamp(span: Span, timestamp: number): number {
         let interval = span.period / span.samples
-        return Math.ceil(timestamp / interval) * interval
+        return Math.ceil((timestamp + 1) / interval) * interval
     }
 
     /* istanbul ignore next */

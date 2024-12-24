@@ -12,15 +12,15 @@ test('Test emit with P-Values', async () => {
     }
     //  p90
     let r = await metrics.query('test/pvalues', 'PMetric', {}, 300, 'p90')
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(9)
-    expect(r.points[0].count).toBe(10)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points[9].value).toBe(9)
+    expect(r.points[9].count).toBe(10)
 
     //  p50
     r = await metrics.query('test/pvalues', 'PMetric', {}, 300, 'p50')
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(6)
-    expect(r.points[0].count).toBe(10)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points[9].value).toBe(6)
+    expect(r.points[9].count).toBe(10)
 
     //  Accumulate
     r = await metrics.query('test/pvalues', 'PMetric', {}, 300, 'p50', {accumulate: true})
@@ -30,7 +30,7 @@ test('Test emit with P-Values', async () => {
 
     //  Higher span
     r = await metrics.query('test/pvalues', 'PMetric', {}, 86400, 'p90')
-    expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(9)
-    expect(r.points[0].count).toBe(10)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points[11].value).toBe(9)
+    expect(r.points[11].count).toBe(10)
 })

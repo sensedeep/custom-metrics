@@ -10,7 +10,7 @@ test('Test query with start', async () => {
 
     let timestamp = new Date(2000, 0, 1).getTime()
     let metric
-    //  Get one week of data
+    //  One week of data
     for (let i = 0; i < 24 * 7; i++) {
         metric = await metrics.emit('test/query', 'StartMetric', 7, [], {timestamp})
         timestamp += 3600 * 1000
@@ -30,13 +30,13 @@ test('Test query with start', async () => {
     expect(r.points[0].value).toBe(14)
     expect(r.points[0].count).toBe(2)
 
-    //  Get last 4-2 days ago
+    //  Get last 2 days of data starting 4 days ago
     let start = timestamp - 86400 * 4 * 1000
     r = await metrics.query('test/query', 'StartMetric', {}, 86400 * 2, 'sum', {start, timestamp})
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[3].period)
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(4)
-    expect(r.points[0].value).toBe(84)
-    expect(r.points[0].count).toBe(12)
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-1)?.value).toBe(84)
+    expect(r.points.at(-1)?.count).toBe(12)
 })

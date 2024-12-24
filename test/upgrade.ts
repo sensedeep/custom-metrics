@@ -1,7 +1,7 @@
 /*
     upgrade.ts - Upgrade spans
  */
-import {client, table, CustomMetrics, SpanDef, log, dump} from './utils/init'
+import {client, table, CustomMetrics, SpanDef, log, dump, dumpMetric} from './utils/init'
 
 // jest.setTimeout(7200 * 1000)
 
@@ -27,40 +27,61 @@ test('Upgrade Spans', async () => {
     let timestamp = new Date(2000, 0, 1).getTime()
 
     let metric
-    for (let i = 0; i < 140; i++) {
+    let count = 4
+    for (let i = 0; i < count; i++) {
         metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {timestamp})
         timestamp += 30 * 1000
     }
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(6)
-    expect(metric.spans[0].points.length).toBe(10)
-    expect(metric.spans[1].points.length).toBe(12)
-    expect(metric.spans[2].points.length).toBe(1)
-    expect(metric.spans[3].points.length).toBe(0)
+    let sum = 0
+    for (let span of metric.spans) {
+        sum += span.points.reduce((total, point) => total + point.count, 0)
+    }
+    expect(sum).toBe(count)
 
     //  Test upgrade
     metrics = new CustomMetrics({client, table, log: true, spans: MoreSpans})
     metric = await metrics.upgrade('test/upgrade', 'UpMetric', [])
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(9)
-    expect(metric.spans[0].points.length).toBe(0)
-    expect(metric.spans[1].points.length).toBe(10)
-    expect(metric.spans[2].points.length).toBe(0)
+
+    sum = 0
+    for (let span of metric.spans) {
+        sum += span.points.reduce((total, point) => total + point.count, 0)
+    }
+    expect(sum).toBe(count)
 
     //  Test downgrade
+    metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
+    metric = await metrics.upgrade('test/upgrade', 'UpMetric', [])
+    expect(metric).toBeDefined()
+    expect(metric.spans.length).toBe(2)
+    sum = 0
+    for (let span of metric.spans) {
+        sum += span.points.reduce((total, point) => total + point.count, 0)
+    }
+    expect(sum).toBe(count)
+
+    //  Test already upgraded
+    metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
+    metric = await metrics.upgrade('test/upgrade', 'UpMetric', [])
+    expect(metric).toBeDefined()
+    expect(metric.spans.length).toBe(2)
+    sum = 0
+    for (let span of metric.spans) {
+        sum += span.points.reduce((total, point) => total + point.count, 0)
+    }
+    expect(sum).toBe(count)
+
+    //  Test inline upgrade with emit
     metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
     metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {upgrade: true})
     expect(metric).toBeDefined()
     expect(metric.spans.length).toBe(2)
-    expect(metric.spans[0].points.length).toBe(1)
-    expect(metric.spans[0].points[0].count).toBe(1)
-    expect(metric.spans[0].points[0].sum).toBe(7)
-    expect(metric.spans[1].points.length).toBe(1)
-    expect(metric.spans[1].points[0].sum).toBe(980)
-    expect(metric.spans[1].points[0].count).toBe(140)
-
-    //  Test already upgraded
-    metrics = new CustomMetrics({client, table, log: true, spans: LessSpans})
-    metric = await metrics.emit('test/upgrade', 'UpMetric', 7, [], {upgrade: true})
-    expect(metric).toBeDefined()
+    sum = 0
+    for (let span of metric.spans) {
+        sum += span.points.reduce((total, point) => total + point.count, 0)
+    }
+    expect(sum).toBe(count + 1)
 })

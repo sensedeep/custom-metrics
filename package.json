@@ -1,6 +1,6 @@
 {
     "name": "custom-metrics",
-    "version": "1.0.5",
+    "version": "1.1.0",
     "description": "Custom metrics for AWS",
     "main": "dist/cjs/index.js",
     "module": "dist/mjs/index.js",
@@ -39,13 +39,13 @@
         "test-cov": "jest --coverage"
     },
     "dependencies": {
-        "@aws-sdk/client-dynamodb": "^3.705.0",
-        "@aws-sdk/util-dynamodb": "^3.705.0"
+        "@aws-sdk/client-dynamodb": "^3.716.0",
+        "@aws-sdk/util-dynamodb": "^3.716.0"
     },
     "devDependencies": {
         "@types/jest": "^29.5.14",
-        "@types/node": "^22.10.1",
-        "dynamo-db-local": "^7.0.0",
+        "@types/node": "^22.10.2",
+        "dynamo-db-local": "^9.3.0",
         "jest": "^29.7.0",
         "senselogs": "^1.0.7",
         "ts-jest": "^29.2.5",

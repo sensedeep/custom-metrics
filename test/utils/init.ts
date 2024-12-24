@@ -1,4 +1,4 @@
-import {CustomMetrics, DefaultSpans, MetricQueryResult, SpanDef} from '../../src/index'
+import {CustomMetrics, DefaultSpans, Metric, MetricQueryResult, SpanDef} from '../../src/index'
 import SenseLogs from 'senselogs'
 
 const log = new SenseLogs({destination: 'stdout', format: 'human'})
@@ -29,22 +29,34 @@ const dump = (...args) => {
     return result
 }
 
-const dumpMetrics = function (results: MetricQueryResult[]) {
+const dumpMetric = function (metric: Metric) {
     let buf: string[] = []
-    for (let metric of results) {
-        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period}`)
-        let points = metric.points.slice(0)
-        for (let point of points) {
-            buf.push(`     ${new Date(point.timestamp!).toLocaleString()} = ${point.value || '-'} / ${point.count}`)
+    buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)}`)
+    for (let span of metric.spans) {
+        buf.push(` ${span.period}, ${new Date(span.end * 1000).toLocaleString()} ${span.points.length} points`)
+        for (let point of span.points) {
+            buf.push(`     count ${point.count} = sum ${point.sum}`)
         }
-        print(buf.join('\n'))
     }
+    print(buf.join('\n'))
+}
+
+const dumpQuery = function (metric: MetricQueryResult) {
+    let points = metric.points.slice(0)
+    let buf: string[] = []
+    buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${points.length} points`)
+    for (let point of points) {
+        buf.push(`     ${new Date(point.timestamp!).toLocaleString()} = ${point.value || '-'} / ${point.count}`)
+    }
+    print(buf.join('\n'))
 }
 
 const print = (...args) => {
     console.log(...args)
 }
 globalThis.dump = dump
+globalThis.dumpMetric = dumpMetric
+globalThis.dumpQuery = dumpQuery
 globalThis.print = print
 
 const delay = async (time: number) => {
@@ -53,4 +65,4 @@ const delay = async (time: number) => {
     })
 }
 
-export {table, client, CustomMetrics, DefaultSpans, SpanDef, delay, dump, dumpMetrics, log, print}
+export {table, client, CustomMetrics, DefaultSpans, SpanDef, delay, dump, dumpMetric, dumpQuery, log, print}
