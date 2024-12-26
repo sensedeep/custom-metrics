@@ -15,6 +15,7 @@ import {
 import {marshall, unmarshall} from '@aws-sdk/util-dynamodb'
 
 const Version = 1
+//MOB disable
 const Assert = true // Enable asserts
 const Buffering = true // Enable buffered metrics
 const DefaultResolution = 0 // Default number of p-values to store
@@ -59,7 +60,7 @@ export type Point = {
     min?: number
     pvalues?: number[]
     sum: number //  Aggregated values
-    timestamp?: number // Never stored
+    timestamp?: number // Buffer timestamp, never stored
 }
 
 /*
@@ -426,6 +427,7 @@ export class CustomMetrics {
             }
             if (point.timestamp) {
                 /*
+                    Buffered points only.
                     Pick the first span for which the point is after the earliest span start or after the end of the span
                  */
                 let si = metric.spans.findIndex((s) => s.end - s.period <= point.timestamp || s.end <= point.timestamp)
@@ -589,8 +591,12 @@ export class CustomMetrics {
         options: MetricQueryOptions = {}
     ): Promise<MetricQueryResult> {
         let owner = options.owner || this.owner
-        let timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
         let dimString = this.makeDimensionString(dimensions)
+
+        if (period > this.spans.at(-1).period) {
+            period = this.spans.at(-1).period
+        }
+        let timestamp = Math.floor((options.timestamp || Date.now()) / 1000)
 
         /*
            Flush buffered metrics for this instance. Will still not see buffered metrics in
@@ -602,69 +608,51 @@ export class CustomMetrics {
                 await this.flushElt(this.buffers[key], timestamp)
             }
         }
-
         let metric = await this.getMetric(owner, namespace, metricName, dimString, options.log)
         if (!metric) {
             return {dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
-        let span
-        let start = options.start
-        if (start) {
+
+        let start: number
+        let si: number
+        if (options.start) {
+            start = options.start / 1000
             /*
-                Map the period that encompasses the start
-             */
-            start /= 1000
-            span = metric.spans.find((s) => s.end - s.period <= start)
-            if (!span) {
-                span = metric.spans[metric.spans.length - 1]
-                period = span.period
-            }
-            timestamp = start + period
-        } else {
-            /*
-                Map the period to the closest span that has a period equal or larger.
-                If the period is too big, then use the largest span period.
+                Find span for the request start: period < span[i+1].period
             */
-            span = metric.spans.find((s) => period <= s.period)
-            if (!span) {
-                span = metric.spans[metric.spans.length - 1]
-                period = span.period
+            si = metric.spans.findIndex((s) => period <= s.period && s.end - s.period <= start && start <= s.end)
+        } else {
+            let span = metric.spans[0]
+            let interval = span.period / span.samples
+            let t = this.roundTime(span, timestamp + 1)
+            if (span.end - interval <= t && t <= span.end) {
+                /*
+                    Special case: increase "start" to cover most recently emitted data. 
+                    If start is at or within the last point of the lowest span.
+                */
+                start = t - period
+            } else {
+                start = timestamp - period
             }
+            si = metric.spans.findIndex((s) => period <= s.period)
         }
+        if (si < 0) {
+            si = metric.spans.length - 1
+        }
+        let span = metric.spans[si]
+        start = this.roundTime(span, start)
+
         /*
-            Aggregate data for all spans less than the desired span.
+            Aggregate data for all spans up to the desired span.
             Do this because spans are updated lazily on emit.
          */
-        this.addValue(metric, timestamp, {count: 0, sum: 0}, 0, period)
+        this.addValue(metric, timestamp, {count: 0, sum: 0}, 0, si)
 
         let result: MetricQueryResult
-
-        /* istanbul ignore else */
-        if (metric && span) {
-            if (start) {
-                span.end = this.getTimestamp(span, timestamp)
-            } else {
-                start = span.end - period
-            }
-            /*
-                Return the last N points matching the request period for the span
-             */
-            let interval = span.period / span.samples
-            let count = Math.ceil(period / interval)
-            let index = Math.floor(span.points.length - (span.end - start) / interval)
-            if (index < 0) {
-                index = 0
-            }
-            span.points = span.points.slice(index, index + count)
-
-            if (options.accumulate) {
-                result = this.accumulateMetric(metric, span, statistic, owner, timestamp)
-            } else {
-                result = this.calculateSeries(metric, span, statistic, owner, timestamp)
-            }
+        if (options.accumulate) {
+            result = this.accumulateMetric(metric, span, statistic, owner, start, period)
         } else {
-            //  Should never happen as spans are created for the desired period
-            result = {dimensions, metric: metricName, namespace, period, points: [], owner, samples: span.samples}
+            result = this.calculateSeries(metric, span, statistic, owner, start, period)
         }
         result.id = options.id
         /* istanbul ignore next */
@@ -688,7 +676,8 @@ export class CustomMetrics {
         span: Span,
         statistic: string,
         owner: string,
-        timestamp: number
+        start: number,
+        period: number
     ): MetricQueryResult {
         let value: number = 0,
             count: number = 0,
@@ -713,34 +702,39 @@ export class CustomMetrics {
             count = 0
         }
         let points = span.points
+        let interval = span.period / span.samples
+        let t = span.end - span.points.length * interval
         for (let i = 0; i < points.length; i++) {
             let point = points[i]
-            if (statistic == 'max') {
-                if (point.max != undefined) {
-                    value = Math.max(value, point.max)
-                } else {
-                    //  For use to accumulate AWS metrics that don't keep min/max in points
-                    value = Math.max(value, point.sum / (point.count || 1))
+            if (start <= t && t < start + period) {
+                if (statistic == 'max') {
+                    if (point.max != undefined) {
+                        value = Math.max(value, point.max)
+                    } else {
+                        //  For use to accumulate AWS metrics that don't keep min/max in points
+                        value = Math.max(value, point.sum / (point.count || 1))
+                    }
+                } else if (statistic == 'min') {
+                    if (point.min != undefined) {
+                        value = Math.min(value, point.min)
+                    } else {
+                        //  For use to accumulate AWS metrics that don't keep min/max in points
+                        value = Math.min(value, point.sum / (point.count || 1))
+                    }
+                } else if (statistic == 'sum') {
+                    value += point.sum
+                } else if (statistic == 'current') {
+                    value = point.sum / (point.count || 1)
+                } else if (statistic == 'count') {
+                    value += point.count
+                } else if (statistic.match(/^p[0-9]+/)) {
+                    pvalues = pvalues.concat(point.pvalues)
+                } /* avg */ else {
+                    value += point.sum
                 }
-            } else if (statistic == 'min') {
-                if (point.min != undefined) {
-                    value = Math.min(value, point.min)
-                } else {
-                    //  For use to accumulate AWS metrics that don't keep min/max in points
-                    value = Math.min(value, point.sum / (point.count || 1))
-                }
-            } else if (statistic == 'sum') {
-                value += point.sum
-            } else if (statistic == 'current') {
-                value = point.sum / (point.count || 1)
-            } else if (statistic == 'count') {
-                value += point.count
-            } else if (statistic.match(/^p[0-9]+/)) {
-                pvalues = pvalues.concat(point.pvalues)
-            } /* avg */ else {
-                value += point.sum
+                count += point.count
             }
-            count += point.count
+            t += interval
         }
         if (statistic.match(/^p[0-9]+/)) {
             let p = parseInt(statistic.slice(1))
@@ -756,7 +750,7 @@ export class CustomMetrics {
             namespace: metric.namespace,
             owner: owner,
             period: span.period,
-            points: [{value, timestamp, count}],
+            points: [{value, timestamp: start + period, count}],
             samples: span.samples,
         }
     }
@@ -771,31 +765,23 @@ export class CustomMetrics {
         span: Span,
         statistic: string,
         owner: string,
-        timestamp: number
+        start: number,
+        period: number
     ): MetricQueryResult {
         let points: MetricQueryPoint[] = []
         let interval = span.period / span.samples
-        let value: number = undefined
 
-        /*
-            The span.end may be in the future as the span.point[] may not yet be full. 
-            Round up the timestamp so we include the most recent point[]
-         */
-        timestamp = this.getTimestamp(span, timestamp)
+        let t: number
+        let firstPoint = span.end - span.points.length * interval
+        let count = Math.floor((firstPoint - start) / interval)
 
-        /*
-            Add filler points prior to real data
-            Note: span.end may be after the timestamp
-         */
-        let t = timestamp - span.samples * interval
-        let start = span.end - span.points.length * interval
-        while (t < start && t < timestamp) {
-            let when = Math.min(t, timestamp)
-            points.push({value: 0, count: 0, timestamp: when * 1000})
-            t += interval
+        for (t = start; t < firstPoint && points.length < span.samples; t += interval) {
+            points.push({value: 0, count: 0, timestamp: t * 1000})
         }
-        if (t < timestamp) {
-            for (let point of span.points) {
+        t = firstPoint
+        for (let point of span.points) {
+            if (start <= t && t < start + period) {
+                let value: number = undefined
                 /* istanbul ignore else */
                 if (point.count > 0) {
                     if (statistic == 'max') {
@@ -830,20 +816,17 @@ export class CustomMetrics {
                 } else {
                     value = 0
                 }
-                if (t < timestamp) {
-                    //  Want timestamp to be the end of the point bucket not the start
-                    let when = Math.min(t + interval, timestamp)
-                    points.push({value, count: point.count, timestamp: when * 1000})
-                }
-                t += interval
+                /*
+                    The timestamp is set to be the end of the point bucket not the start, and not after the range
+                */
+                let timestamp = Math.min(t + interval, start + period) * 1000
+                points.push({value, count: point.count, timestamp})
             }
+            t += interval
         }
-        /*
-            Add filler points after the last real data
-         */
-        while (t < timestamp) {
-            let when = Math.min(t, timestamp)
-            points.push({value: 0, count: 0, timestamp: when * 1000})
+        count = Math.ceil(period / interval)
+        while (points.length < count) {
+            points.push({value: 0, count: 0, timestamp: t * 1000})
             t += interval
         }
         return {
@@ -885,11 +868,11 @@ export class CustomMetrics {
     }
 
     /*
-        Add a point value to the metric at a desired timestamp (and/or span index).
+        Add a point value to the metric the span index with the given timestamp.
         We aggregate aged out points to upper spans as required.
-        For queries, a queryPeriod nominates the desired span, all lower span values are aggregated up.
+        For queries, a span nominates the desired span, all lower span values are aggregated up.
      */
-    private addValue(metric: Metric, timestamp: number, point: Point, si: number, queryPeriod: number = 0) {
+    private addValue(metric: Metric, timestamp: number, point: Point, si: number, querySpanIndex: number = undefined) {
         this.assert(metric)
         this.assert(timestamp)
         this.assert(0 <= si && si < metric.spans.length)
@@ -899,14 +882,17 @@ export class CustomMetrics {
         /* istanbul ignore next */
         let points = span.points || []
 
-        let queryRecurse = queryPeriod && span.period < queryPeriod && si + 1 < metric.spans.length
+        /*
+            Determine if need to recurse and aggregate earlier spans
+         */
+        let queryRecurse = si < querySpanIndex && si + 1 < metric.spans.length
 
         //  Just for safety, should not happen
         /* istanbul ignore next */
         while (points.length > span.samples) {
             points.shift()
         }
-        let start = span.end - points.length * interval
+        let first = span.end - points.length * interval
 
         /*
             Aggregate points. Calculate how many points have aged, or if querying, how many must be aggregated.
@@ -917,9 +903,9 @@ export class CustomMetrics {
             if (queryRecurse) {
                 //  Querying and not yet on the target period, so aggregate all points
                 shift = points.length
-            } else if (timestamp >= start) {
+            } else if (timestamp >= first) {
                 //  Count of aged data points
-                shift = Math.floor((timestamp - start) / interval) - span.samples
+                shift = Math.floor((timestamp - first) / interval) - span.samples
                 if (!queryRecurse && point.count && timestamp >= span.end) {
                     //  Add one more to make room for this point being added
                     shift += 1
@@ -934,41 +920,40 @@ export class CustomMetrics {
             for (let i = 0; i < shift; i++) {
                 let p = points.shift()
                 if (p.count && si + 1 < metric.spans.length) {
-                    this.addValue(metric, start, p, si + 1, queryPeriod)
+                    this.addValue(metric, first, p, si + 1, querySpanIndex)
                 }
-                start += interval
+                first += interval
             }
         }
         if (queryRecurse) {
             //  Querying and not at the terminal period. Must recurse and aggregate all spans up to the target span.
-            this.addValue(metric, timestamp, point, si + 1, queryPeriod)
+            this.addValue(metric, timestamp, point, si + 1, querySpanIndex)
             return
         }
         if (point.count) {
-            let index
+            let index: number
             if (points.length == 0) {
                 points.push({count: 0, sum: 0})
                 /*
-                    Try to keep span.end == timestamp if possible so that when aggregating lower spans
-                    we keep their span.end if it aligns for the target span
+                    This will set the span.end to the next aligned interval that is >timestamp
                  */
-                span.end = this.getTimestamp(span, timestamp)
-                start = span.end - interval
+                span.end = this.roundTime(span, timestamp + 1)
+                first = span.end - interval
                 index = 0
             } else {
                 if (timestamp < span.end - span.period) {
                     //  Discard if before the earliest possible point for the span
                     return
                 }
-                while (timestamp < start) {
+                while (timestamp < first) {
                     points.unshift({count: 0, sum: 0})
-                    start -= interval
+                    first -= interval
                 }
                 while (timestamp >= span.end) {
                     points.push({count: 0, sum: 0})
                     span.end += interval
                 }
-                index = Math.floor((timestamp - start) / interval)
+                index = Math.floor((timestamp - first) / interval)
             }
             this.assert(points.length <= span.samples)
 
@@ -1087,7 +1072,8 @@ export class CustomMetrics {
                 end: timestamp,
                 points: [],
             }
-            span.end = this.getTimestamp(span, timestamp)
+            //  This will set the span.end to the next aligned interval that is >timestamp
+            span.end = this.roundTime(span, timestamp + 1)
             metric.spans.push(span)
         }
         return metric
@@ -1310,12 +1296,12 @@ export class CustomMetrics {
     }
 
     /*
-        Get a rounded up timestamp in seconds
+        Get a value that is >timestamp and rounded up in seconds to be interval aligned
         Note: this may be in the future
      */
-    private getTimestamp(span: Span, timestamp: number): number {
+    private roundTime(span: Span, timestamp: number): number {
         let interval = span.period / span.samples
-        return Math.ceil((timestamp + 1) / interval) * interval
+        return Math.ceil(timestamp / interval) * interval
     }
 
     /* istanbul ignore next */

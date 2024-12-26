@@ -9,6 +9,10 @@ const log = new SenseLogs({destination: 'stdout', format: 'human'})
 const client = globalThis.DynamoDBClient
 const table = globalThis.TableName
 
+const dt = (n) => {
+    return new Date(n * 1000).toLocaleString()
+}
+
 const dump = (...args) => {
     let s: string[] = []
     for (let item of args) {
@@ -33,7 +37,8 @@ const dumpMetric = function (metric: Metric) {
     let buf: string[] = []
     buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)}`)
     for (let span of metric.spans) {
-        buf.push(` ${span.period}, ${new Date(span.end * 1000).toLocaleString()} ${span.points.length} points`)
+        let start = span.end - span.period
+        buf.push(` ${span.period} secs from ${new Date(start * 1000).toLocaleString()}, ${new Date(span.end * 1000).toLocaleString()} ${span.points.length} points`)
         for (let point of span.points) {
             buf.push(`     count ${point.count} = sum ${point.sum}`)
         }
@@ -54,6 +59,7 @@ const dumpQuery = function (metric: MetricQueryResult) {
 const print = (...args) => {
     console.log(...args)
 }
+globalThis.dt = dt
 globalThis.dump = dump
 globalThis.dumpMetric = dumpMetric
 globalThis.dumpQuery = dumpQuery

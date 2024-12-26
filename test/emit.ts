@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, log} from './utils/init'
 
-// jest.setTimeout(7200 * 1000)
+jest.setTimeout(7200 * 1000)
 
 test('Test basic emit', async () => {
     let metrics = new CustomMetrics({client, table, owner: 'service', log: true})
@@ -44,14 +44,15 @@ test('Test basic emit', async () => {
 
 test('Test emit with dimensions', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
+    let timestamp = new Date(2000, 0, 1).getTime()
 
-    await metrics.emit('test/emit', 'Launches', 10, [{}, {Rocket: 'SaturnV'}])
-    await metrics.emit('test/emit', 'Launches', 10, [{}, {Rocket: 'Falcon9'}])
+    await metrics.emit('test/emit', 'Launches', 10, [{}, {Rocket: 'SaturnV'}], {timestamp})
+    await metrics.emit('test/emit', 'Launches', 10, [{}, {Rocket: 'Falcon9'}], {timestamp})
 
     /*
         Query total launches
      */
-    let r = await metrics.query('test/emit', 'Launches', {}, 300, 'sum')
+    let r = await metrics.query('test/emit', 'Launches', {}, 300, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.dimensions).toBeDefined()
     expect(Object.keys(r.dimensions).length).toBe(0)
@@ -60,7 +61,7 @@ test('Test emit with dimensions', async () => {
     expect(r.points.at(-1)?.count).toBe(2)
 
     //  Query just one dimension
-    r = await metrics.query('test/emit', 'Launches', {Rocket: 'Falcon9'}, 300, 'sum')
+    r = await metrics.query('test/emit', 'Launches', {Rocket: 'Falcon9'}, 300, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.dimensions).toBeDefined()
     expect(r.dimensions.Rocket).toBe('Falcon9')
@@ -69,7 +70,7 @@ test('Test emit with dimensions', async () => {
     expect(r.points.at(-1)?.count).toBe(1)
 
     //  Query unknown dimension
-    r = await metrics.query('test/emit', 'Launches', {Rocket: 'Starship'}, 300, 'sum')
+    r = await metrics.query('test/emit', 'Launches', {Rocket: 'Starship'}, 300, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.dimensions).toBeDefined()
     expect(r.dimensions.Rocket).toBe('Starship')

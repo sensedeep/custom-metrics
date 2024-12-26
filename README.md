@@ -36,7 +36,7 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Computes statistics for: average, min, max, count and sum.
 -   Computes P value statistics with configurable P value resolution.
 -   Supports a default metric intervals of: last 5 mins, hour, day, week, month and year.
--   Supports querying from arbitrary start dates up to the current time.
+-   Supports querying from arbitrary start dates.
 -   Configurable custom intervals for higher or different metric intervals.
 -   Fast and flexible metric query API.
 -   Query API can return data points or aggregate metric data to a single statistic.
@@ -170,6 +170,14 @@ let results = await metrics.query('Acme/Metrics', 'speed', {
 ```
 
 This will return a single maximum speed over the last day.
+
+The following will do the same but from a given start date and evaluate 28 days of data.
+
+```javascript
+let results = await metrics.query('Acme/Metrics', 'speed', {
+    rocket: 'saturnV'
+}, 28 * 86400, 'max', {accumulate: true, start: new Date(2000, 0, 1).getTime()})
+```
 
 To obtain a list of metrics, use the `getMetricList` method:
 
@@ -448,6 +456,8 @@ If `options.id` is provided, the ID will be returned in the corresponding result
 
 If `options.log` is set to true, this will emit debug trace to the console.
 
+If `options.start` is set to a date, the query will return data starting at that date for the requested period
+
 ### getMetricList
 
 Return a list of supported namespaces, metrics and dimensions.
@@ -532,7 +542,7 @@ Here is what a metric item looks like:
 
 Data from shorter spans are propagated lazily to longer spans when the span points become full. This is done during emit and flush only. Queries will flush buffered metrics for the matching query to disk. Queries will propagate earlier span data points in-memory and will not otherwise update the on-disk representation.
 
-The span.end marks the time of the most recent data point and is updated whenever a new data point is added to the span. Spans may have zero or more data points. The span.end values for the various spans are not correlated or coordinated. 
+The span.end marks the time of the end of the point bucket and is updated whenever a new data point is added to the span. Spans may have zero or more data points. The span.end values for the various spans are not ordered, correlated or coordinated between spans. 
 
 ### References
 

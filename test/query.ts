@@ -1,9 +1,9 @@
 /*
     query.ts - Test metric query
  */
-import {client, table, CustomMetrics, DefaultSpans, dump, dumpMetric} from './utils/init'
+import {client, table, CustomMetrics, DefaultSpans, dump, dumpMetric, print} from './utils/init'
 
-// jest.setTimeout(7200 * 1000)
+jest.setTimeout(7200 * 1000)
 
 test('Test basic query', async () => {
     let metrics = new CustomMetrics({client, table, log: false})
@@ -37,14 +37,14 @@ test('Test query period', async () => {
     timestamp -= 30 * 1000
     expect(metric.spans[0].points.length).toBe(10)
 
-    //  With a period shorter than the lowest span
+    //  With a period shorter than the lowest span - only one interval
     let r = await metrics.query('test/query', 'PeriodMetric', {}, 30, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[0].period)
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(r.samples)
-    expect(r.points[9].value).toBe(7)
-    expect(r.points[9].count).toBe(1)
+    expect(r.points.length).toBe(1)
+    expect(r.points[0].value).toBe(7)
+    expect(r.points[0].count).toBe(1)
 
     //  With a period above the span emitted
     r = await metrics.query('test/query', 'PeriodMetric', {}, 3600, 'sum', {timestamp})
@@ -61,7 +61,7 @@ test('Test query period', async () => {
     expect(r).toBeDefined()
     expect(r.period).toBe(period)
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(12)
+    expect(r.points.length).toBe(r.samples)
     expect(r.points[11].value).toBe(70)
     expect(r.points[11].count).toBe(10)
 })
@@ -127,6 +127,7 @@ test('Test query statistics with accumulate', async () => {
         metric = await metrics.emit('test/query', 'AccMetric', i, [], {timestamp: timestamp + 1})
         timestamp += interval * 1000
     }
+    timestamp -= interval * 1000
 
     //  Average
     let r = await metrics.query('test/query', 'AccMetric', {}, 300, 'avg', {accumulate: true, timestamp})
@@ -155,11 +156,14 @@ test('Test query statistics with accumulate', async () => {
 
 test('Test query p values', async () => {
     let metrics = new CustomMetrics({client, table, pResolution: 10})
+    // let timestamp = new Date(2000, 0, 1).getTime()
+
     for (let i = 0; i < 10; i++) {
-        await metrics.emit('test/query', 'PMetric', i)
+        await metrics.emit('test/query', 'PMetric', i, [])
     }
     //  p90
     let r = await metrics.query('test/query', 'PMetric', {}, 300, 'p90')
+    expect(r.period).toBe(300)
     expect(r.points.length).toBe(r.samples)
     expect(r.points[9].value).toBe(9)
     expect(r.points[9].count).toBe(10)
@@ -173,18 +177,19 @@ test('Test query p values', async () => {
 
 test('Test missing metrics', async () => {
     let metrics = new CustomMetrics({client, table})
+    let timestamp = new Date(2000, 0, 1).getTime()
 
     //  Missing namespace
-    let r = await metrics.query('Unknown', 'Unknown', {}, 300, 'avg')
+    let r = await metrics.query('Unknown', 'Unknown', {}, 300, 'avg', {timestamp})
     expect(r.points.length).toBe(0)
 
     //  Missing metric
-    await metrics.emit('test/query', 'MMetric', 1)
-    r = await metrics.query('test/query', 'Unknown', {}, 300, 'avg')
+    await metrics.emit('test/query', 'MMetric', 1, [], {timestamp})
+    r = await metrics.query('test/query', 'Unknown', {}, 300, 'avg', {timestamp})
     expect(r.points.length).toBe(0)
 
     //  Missing span, but still return data point
-    r = await metrics.query('test/query', 'MMetric', {}, 86400, 'avg')
+    r = await metrics.query('test/query', 'MMetric', {}, 86400, 'avg', {timestamp})
     expect(r.points.length).toBe(r.samples)
 })
 
@@ -197,7 +202,7 @@ test('Test query with non-standard period', async () => {
         metric = await metrics.emit('test/query', 'BasicMetric', 7, [], {timestamp})
         timestamp += 30 * 1000
     }
-    timestamp -= 30 * 1000
+    // timestamp -= 30 * 1000
     expect(metric.spans[0].points.length).toBe(10)
 
     /*
@@ -208,9 +213,9 @@ test('Test query with non-standard period', async () => {
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[1].period)
     expect(r.points).toBeDefined()
-    expect(r.points.length).toBe(r.samples)
-    expect(r.points[9].value).toBe(70)
-    expect(r.points[10].value).toBe(70)
-    expect(r.points[11].value).toBe(70)
-    expect(r.points[11].count).toBe(10)
+    expect(r.points.length).toBe(3)
+    expect(r.points[0].count).toBe(10)
+    expect(r.points[0].value).toBe(70)
+    expect(r.points[1].value).toBe(70)
+    expect(r.points[2].value).toBe(70)
 })

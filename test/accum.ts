@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, log, dump} from './utils/init'
 
-// jest.setTimeout(7200 * 1000)
+jest.setTimeout(7200 * 1000)
 
 test('Test', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
@@ -15,7 +15,7 @@ test('Test', async () => {
         await metrics.emit('test/accum', 'FirstMetric', 10, [], {timestamp})
         timestamp += interval * 1000
     }
-    timestamp = timestamp - interval * 1000 + 1000
+    // timestamp = timestamp - interval * 1000 + 1000
     let r = await metrics.query('test/accum', 'FirstMetric', {}, 86400, 'sum', {timestamp, accumulate: true})
     expect(r).toBeDefined()
     expect(r.metric).toBe('FirstMetric')

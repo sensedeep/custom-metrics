@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans} from './utils/init'
 
-// jest.setTimeout(7200 * 1000)
+jest.setTimeout(7200 * 1000)
 
 test('Test', async () => {
     let metrics = new CustomMetrics({client, table})
@@ -16,6 +16,7 @@ test('Test', async () => {
         timestamp += interval * 1000
     }
     timestamp -= (interval * 1000)
+
     let r = await metrics.query('test/propagate', 'FirstMetric', {}, 86400, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.metric).toBe('FirstMetric')

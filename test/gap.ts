@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, dumpMetric} from './utils/init'
 
-// jest.setTimeout(7200 * 1000)
+jest.setTimeout(7200 * 1000)
 
 test('Test gaps between emit and query', async () => {
     let metrics = new CustomMetrics({client, table})
@@ -99,10 +99,16 @@ test('Test that points before data and after data are filled', async () => {
     expect(metric.spans[1].points.length).toBe(1)
     expect(metric.spans[1].points[0].sum).toBe(10)
 
-    //  Move time on by 4 intervals
-    timestamp += 4 * interval * 1000
     let r = await metrics.query('test/gap', 'FillMetric', {}, 3600, 'sum', {timestamp})
     expect(r.points.length).toBe(r.samples)
-    expect(r.points.at(-5)?.value).toBe(20)
-    expect(r.points.at(-7)?.value).toBe(10)
+    expect(r.points.at(-1)?.value).toBe(20)
+    expect(r.points.at(-3)?.value).toBe(10)
+
+    //  Move time on by 4 intervals
+    //  This takes us outside the special case of query with same timestamp as last emit
+    timestamp += 4 * interval * 1000
+    r = await metrics.query('test/gap', 'FillMetric', {}, 3600, 'sum', {timestamp})
+    expect(r.points.length).toBe(r.samples)
+    expect(r.points.at(-4)?.value).toBe(20)
+    expect(r.points.at(-6)?.value).toBe(10)
 })

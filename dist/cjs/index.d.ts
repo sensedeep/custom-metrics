@@ -141,7 +141,7 @@ export declare class CustomMetrics {
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
     flush(): Promise<void>;
-    flushElt(elt: BufferElt): Promise<void>;
+    flushElt(elt: BufferElt, timestamp: number): Promise<void>;
     getBufferKey(namespace: string, metricName: string, dimensions: string): string;
     query(namespace: string, metricName: string, dimensions: MetricDimensions, period: number, statistic: string, options?: MetricQueryOptions): Promise<MetricQueryResult>;
     private accumulateMetric;
@@ -178,7 +178,7 @@ export declare class CustomMetrics {
     };
     static freeInstanceByKey(key: string): void;
     static saveInstance(tags: object, metrics: CustomMetrics): void;
-    private getTimestamp;
+    private roundTime;
     private assert;
     private info;
     private error;
