@@ -24,7 +24,7 @@ test('Test year span', async () => {
      */
     let r = await metrics.query('test/year', 'FirstMetric', {}, span.period, 'sum', {timestamp})
 
-    dumpQuery(r)
+    // dumpQuery(r)
     expect(r).toBeDefined()
     expect(r.metric).toBe('FirstMetric')
     expect(r.namespace).toBe('test/year')
