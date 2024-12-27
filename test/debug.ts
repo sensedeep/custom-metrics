@@ -7,7 +7,7 @@
  */
 import {client, table, CustomMetrics, log} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Test', async () => {
     expect(true).toBe(true)

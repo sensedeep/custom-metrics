@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, dumpMetric} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Test gaps between emit and query', async () => {
     let metrics = new CustomMetrics({client, table})

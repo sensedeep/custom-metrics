@@ -9,9 +9,25 @@ const log = new SenseLogs({destination: 'stdout', format: 'human'})
 const client = globalThis.DynamoDBClient
 const table = globalThis.TableName
 
-const dt = (n) => {
-    return new Date(n * 1000).toLocaleString()
+//  Format date
+function fmtdate(n) {
+    function padTo2Digits(num) {
+        return num.toString().padStart(2, '0')
+    }
+    let date = new Date(n)
+    const year = date.getFullYear().toString().slice(-2) // Get last two digits of the year
+    const month = padTo2Digits(date.getMonth() + 1) // Months are zero-indexed
+    const day = padTo2Digits(date.getDate())
+    const hours = padTo2Digits(date.getHours())
+    const minutes = padTo2Digits(date.getMinutes())
+    const seconds = padTo2Digits(date.getSeconds())
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
+
+function dt(n: number) {
+    return fmtdate(n * 1000)
+}
+
 
 const dump = (...args) => {
     let s: string[] = []
@@ -20,7 +36,7 @@ const dump = (...args) => {
             item,
             function (key, value) {
                 if (this[key] instanceof Date) {
-                    return this[key].toLocaleString()
+                    return fmtdate(this[key].getTime())
                 }
                 return value
             },
@@ -37,8 +53,11 @@ const dumpMetric = function (metric: Metric) {
     let buf: string[] = []
     buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)}`)
     for (let span of metric.spans) {
-        let start = span.end - span.period
-        buf.push(` ${span.period} secs from ${new Date(start * 1000).toLocaleString()}, ${new Date(span.end * 1000).toLocaleString()} ${span.points.length} points`)
+        let interval = span.period / span.samples
+        let start = span.end - span.points.length * interval
+        buf.push(
+            ` ${span.period} secs ${fmtdate(start * 1000)} => ${fmtdate(span.end * 1000)} ${span.points.length} points`
+        )
         for (let point of span.points) {
             buf.push(`     count ${point.count} = sum ${point.sum}`)
         }
@@ -49,9 +68,13 @@ const dumpMetric = function (metric: Metric) {
 const dumpQuery = function (metric: MetricQueryResult) {
     let points = metric.points.slice(0)
     let buf: string[] = []
-    buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${points.length} points`)
+    buf.push(
+        `${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${
+            points.length
+        } points`
+    )
     for (let point of points) {
-        buf.push(`     ${new Date(point.timestamp!).toLocaleString()} = ${point.value || '-'} / ${point.count}`)
+        buf.push(`     ${fmtdate(point.timestamp || 0)} = ${point.value || '-'} / ${point.count}`)
     }
     print(buf.join('\n'))
 }
@@ -60,6 +83,7 @@ const print = (...args) => {
     console.log(...args)
 }
 globalThis.dt = dt
+globalThis.fmtdate = fmtdate
 globalThis.dump = dump
 globalThis.dumpMetric = dumpMetric
 globalThis.dumpQuery = dumpQuery

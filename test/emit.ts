@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, log} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Test basic emit', async () => {
     let metrics = new CustomMetrics({client, table, owner: 'service', log: true})

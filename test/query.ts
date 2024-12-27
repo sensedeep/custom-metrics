@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, dump, dumpMetric, print} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Test basic query', async () => {
     let metrics = new CustomMetrics({client, table, log: false})
@@ -34,7 +34,7 @@ test('Test query period', async () => {
         metric = await metrics.emit('test/query', 'PeriodMetric', 7, [], {timestamp})
         timestamp += 30 * 1000
     }
-    timestamp -= 30 * 1000
+    // timestamp -= 30 * 1000
     expect(metric.spans[0].points.length).toBe(10)
 
     //  With a period shorter than the lowest span - only one interval

@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Constructor with table name', async () => {
     let metrics = new CustomMetrics({table})

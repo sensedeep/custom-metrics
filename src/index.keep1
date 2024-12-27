@@ -640,6 +640,7 @@ export class CustomMetrics {
         if (si < 0) {
             si = metric.spans.length - 1
         }
+
         /*
             Aggregate data for all spans up to the desired span.
             Do this because spans are updated lazily on emit.
@@ -771,20 +772,18 @@ export class CustomMetrics {
         let points: MetricQueryPoint[] = []
         let interval = span.period / span.samples
 
-        /*
-            Start points aligned with span buckets
-         */
         let start = this.alignTime(span, end - period)
-        let firstPoint = span.end - span.points.length * interval
 
         let t: number
+        let firstPoint = span.end - span.points.length * interval
+        let count = Math.floor((firstPoint - start) / interval)
+
         for (t = start; t < firstPoint && points.length < span.samples; t += interval) {
             points.push({value: 0, count: 0, timestamp: t * 1000})
         }
         t = firstPoint
         for (let point of span.points) {
-            //  MOB - end was start + period, now end is closer
-            if (start <= t && t < end) {
+            if (start <= t && t < start + period) {
                 let value: number = undefined
                 /* istanbul ignore else */
                 if (point.count > 0) {
@@ -823,14 +822,14 @@ export class CustomMetrics {
                 /*
                     The timestamp is set to be the end of the point bucket not the start, and not after the range
                 */
-                let timestamp = Math.min(t + interval, end) * 1000
+                let timestamp = Math.min(t + interval, start + period) * 1000
                 points.push({value, count: point.count, timestamp})
             }
             t += interval
         }
-        let count = Math.ceil(period / interval)
+        count = Math.ceil(period / interval)
         while (points.length < count) {
-            let timestamp = Math.min(t + interval, end) * 1000
+            let timestamp = Math.min(t + interval, start + period) * 1000
             points.push({value: 0, count: 0, timestamp})
             t += interval
         }
@@ -941,7 +940,6 @@ export class CustomMetrics {
                 points.push({count: 0, sum: 0})
                 /*
                     This will set the span.end to the next aligned interval that is >timestamp
-                    NOTE: this may mean that span.start is set before now and before recorded time
                  */
                 span.end = this.alignTime(span, timestamp + 1)
                 first = span.end - interval
@@ -1079,9 +1077,7 @@ export class CustomMetrics {
                 points: [],
             }
             //  This will set the span.end to the next aligned interval that is >timestamp
-            let interval = span.period / span.samples
-            // span.end = this.alignTime(span, now + 1)
-            span.end = this.alignTime(span, now + interval)
+            span.end = this.alignTime(span, now + 1)
             metric.spans.push(span)
         }
         return metric

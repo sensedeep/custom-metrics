@@ -35,8 +35,8 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Similar metric model to AWS CloudWatch metrics supporting namespaces, metrics, dimensions, statistics and intervals.
 -   Computes statistics for: average, min, max, count and sum.
 -   Computes P value statistics with configurable P value resolution.
--   Supports a default metric intervals of: last 5 mins, hour, day, week, month and year.
--   Supports querying from arbitrary start dates.
+-   Supports default metric intervals of: last 5 mins, hour, day, week, month and year.
+-   Supports querying from arbitrary start dates for most recent period.
 -   Configurable custom intervals for higher or different metric intervals.
 -   Fast and flexible metric query API.
 -   Query API can return data points or aggregate metric data to a single statistic.
@@ -45,11 +45,11 @@ CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexi
 -   Supports multiple services, apps, namespaces and metrics in a single DynamoDB table.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
--   Clean, readable, small, TypeScript code base (~1.3K lines).
+-   Clean, readable, small, TypeScript code base (~1.4K lines).
 -   No external dependencies.
 -   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics. [EmbedThis Ioto](https://www.embedthis.com/) uses CustomMetrics for IoT metrics.
 
-![Dark Mode](./doc/dashboard-dark.avif)
+![Custom Metrics](./doc/dashboard-dark.avif)
 
 ## Quick Tour
 
@@ -456,7 +456,11 @@ If `options.id` is provided, the ID will be returned in the corresponding result
 
 If `options.log` is set to true, this will emit debug trace to the console.
 
-If `options.start` is set to a date, the query will return data starting at that date for the requested period
+If `options.start` is set to a date, the query will return data starting at that date for the requested period.
+
+To optimize performance and data resolution, query point data has timestamps aligned on span boundaries. This means that your point timestamps, including the last point's timestamp will not generally align with the current time, but will be advanced to align with stored span's boundaries. 
+
+The timestamp for the last data point will not be greater than the current time and so the last data point may be shorter duration than previous points.
 
 ### getMetricList
 

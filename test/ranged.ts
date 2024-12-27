@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, DefaultSpans, dumpMetric, dumpQuery} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 test('Test that points before data and after data are filled', async () => {
     let metrics = new CustomMetrics({client, table})
