@@ -622,7 +622,7 @@ export class CustomMetrics {
                 Find span for the request start: period < span[i+1].period
             */
             let start = options.start / 1000
-            si = metric.spans.findIndex((s) => s.end - s.period <= start && start < s.end)
+            si = metric.spans.findIndex((s) => period <= s.period && s.end - s.period <= start && start < s.end)
             end = start + period
         } else {
             let span = metric.spans[0]
@@ -828,7 +828,7 @@ export class CustomMetrics {
             }
             t += interval
         }
-        let count = Math.ceil(period / interval)
+        let count = Math.min(Math.ceil(period / interval), span.samples)
         while (points.length < count) {
             let timestamp = Math.min(t + interval, end) * 1000
             points.push({value: 0, count: 0, timestamp})
