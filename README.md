@@ -140,7 +140,7 @@ let results = await metrics.query('Acme/Metrics', 'speed', {
 }, 86400, 'max')
 ```
 
-This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds). Intervals that have no data will have points set to {count: 0, value: 0, timestamp}.
+This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds). Intervals that have no data will have points set to {count: 0, value: 0, timestamp}. Use {} for the all-dimensions value.
 
 This will return data like this:
 
@@ -171,13 +171,21 @@ let results = await metrics.query('Acme/Metrics', 'speed', {
 
 This will return a single maximum speed over the last day.
 
-The following will do the same but from a given start date and evaluate 28 days of data.
+The following will do the same but from a specific start date.
 
 ```javascript
 let results = await metrics.query('Acme/Metrics', 'speed', {
     rocket: 'saturnV'
 }, 28 * 86400, 'max', {accumulate: true, start: new Date(2000, 0, 1).getTime()})
 ```
+
+To query multiple metrics, use the `queryMetrics` method. This will query all dimensions for a metric and 
+return a list of metric results for all dimensions. Note: this will not flush buffered metric values before computing the results.
+
+```javascript
+let results = await metrics.queryMetrics('Acme/Metrics', 'speed', 86400, 'avg')
+```
+
 
 To obtain a list of metrics, use the `getMetricList` method:
 

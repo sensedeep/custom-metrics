@@ -148,6 +148,7 @@ export type MetricListOptions = {
     limit?: number
     owner?: string
     next?: object
+    timestamp?: number
 }
 
 export type MetricQueryOptions = {
@@ -601,8 +602,8 @@ export class CustomMetrics {
         let now = Math.floor((options.timestamp || Date.now()) / 1000)
 
         /*
-           Flush buffered metrics for this instance. Will still not see buffered metrics in
-           other instances until they are flushed.
+           Flush buffered metrics for this instance. Will not see buffered metrics in other instances 
+           until they are flushed.
          */
         if (this.buffers) {
             let key = this.getBufferKey(namespace, metricName, dimString)
@@ -614,9 +615,66 @@ export class CustomMetrics {
         if (!metric) {
             return {dimensions, id: options.id, metric: metricName, namespace, period, points: [], owner, samples: 0}
         }
+        let result = this.processMetric(metric, now, period, statistic, options)
 
+        /* istanbul ignore next */
+        this.log[options.log == true ? 'info' : 'trace'](`Query metrics ${namespace}, ${metricName}`, {
+            dimensions,
+            period,
+            statistic,
+            options,
+            result,
+        })
+        return result
+    }
+
+    async queryMetrics(
+        namespace: string,
+        metric: string | undefined,
+        period: number,
+        statistic: string,
+        options: MetricListOptions = {}
+    ): Promise<MetricQueryResult[]> {
+        let owner = options.owner || this.owner
+        let next: object | undefined = options.next
+        let limit = options.limit || MetricListLimit
+        /* istanbul ignore next */
+        let chan = options.log == true ? 'info' : 'trace'
+        let items, command
+        let count = 0
+        do {
+            /* istanbul ignore next */
+            ;({command, items, next} = await this.findMetrics(owner, namespace, metric, limit, next, 'spans'))
+            this.log[chan](`Find metrics ${namespace}, ${metric}`, {command, items})
+            if (items.length) {
+                count += items.length
+            }
+        } while (next && count < limit)
+
+        let now = Math.floor((options.timestamp || Date.now()) / 1000)
+
+        let results = []
+        for (let metric of items) {
+            let result = this.processMetric(metric, now, period, statistic, {accumulate: true, timestamp: now})
+            results.push(result)
+        }
+        return results
+    }
+
+    /*
+       Process a metric for query() or queryMetrics() and extract the desired series or accumlated value
+     */
+    processMetric(
+        metric: Metric,
+        now: number,
+        period: number,
+        statistic: string,
+        options: MetricQueryOptions
+    ): MetricQueryResult {
         let end: number
         let si: number
+        let owner = options.owner || this.owner
+
         if (options.start) {
             /*
                 Find span for the request start: period < span[i+1].period
@@ -641,8 +699,7 @@ export class CustomMetrics {
             si = metric.spans.length - 1
         }
         /*
-            Aggregate data for all spans up to the desired span.
-            Do this because spans are updated lazily on emit.
+            Aggregate data for all spans up to the desired span. Do this because spans are updated lazily on emit.
          */
         this.addValue(metric, now, {count: 0, sum: 0}, 0, si)
 
@@ -654,14 +711,6 @@ export class CustomMetrics {
             result = this.calculateSeries(metric, span, statistic, owner, end, period)
         }
         result.id = options.id
-        /* istanbul ignore next */
-        this.log[options.log == true ? 'info' : 'trace'](`Query metrics ${namespace}, ${metricName}`, {
-            dimensions,
-            period,
-            statistic,
-            options,
-            result,
-        })
         return result
     }
 
@@ -1120,7 +1169,8 @@ export class CustomMetrics {
         namespace: string,
         metric: string | undefined,
         limit: number,
-        startKey: object
+        startKey: object,
+        fields: string = ''
     ): Promise<{items: Metric[]; next: object; command: QueryCommand}> {
         let key = [namespace]
         if (metric) {
@@ -1129,6 +1179,10 @@ export class CustomMetrics {
         /* istanbul ignore next */
 
         let start = startKey ? marshall(startKey) : undefined
+        let project = `${this.primaryKey}, ${this.sortKey}`
+        if (fields) {
+            project += `, ${fields}`
+        }
         let command = new QueryCommand({
             TableName: this.table,
             ExpressionAttributeNames: {
@@ -1144,7 +1198,7 @@ export class CustomMetrics {
             Limit: limit,
             ScanIndexForward: true,
             ExclusiveStartKey: start,
-            ProjectionExpression: `${this.primaryKey}, ${this.sortKey}`,
+            ProjectionExpression: project,
         })
 
         let result = await this.client.send(command)
