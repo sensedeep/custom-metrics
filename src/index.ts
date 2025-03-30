@@ -15,8 +15,7 @@ import {
 import {marshall, unmarshall} from '@aws-sdk/util-dynamodb'
 
 const Version = 1
-//MOB disable
-const Assert = true // Enable asserts
+const Assert = false // Enable asserts
 const Buffering = true // Enable buffered metrics
 const DefaultResolution = 0 // Default number of p-values to store
 const MaxSeq = Number.MAX_SAFE_INTEGER // Maximum sequence number for collision detection
