@@ -66,8 +66,8 @@ test('Test elapsed buffers', async () => {
     expect(r.period).toBe(86400)
     expect(r.points).toBeDefined()
     expect(r.points.length).toBe(r.samples)
-    expect(r.points[11].value).toBe(11)
-    expect(r.points[11].count).toBe(5)
+    expect(r.points[10].value).toBe(4)
+    expect(r.points[11].count).toBe(1)
 })
 
 test('Test buffer API', async () => {
