@@ -359,6 +359,20 @@ export class CustomMetrics {
             dimensions,
             spans: [{points: [{count: 0, sum: 0}]}] as Span[],
         })
+
+        if (
+            buffer.force ||
+            (buffer.sum && (elt.sum + point.sum) >= buffer.sum) ||
+            (buffer.count && (elt.count + point.count) >= buffer.count) ||
+            now >= elt.timestamp
+        ) {
+            options = Object.assign({}, options, {timestamp: now * 1000})
+            let metric = await this.emitDimensionedMetric(namespace, metricName, elt, dimensions, options)
+            //  Reset tallies and save higher spans to return for future buffered metrics
+            elt.count = elt.sum = 0
+            elt.spans = metric.spans
+            elt.timestamp = now + (buffer.elapsed || this.spans[0].period / this.spans[0].samples)
+        }
         /*
             Add point value to the lowest span and to the elt (to manage when to persist)
          */
@@ -370,20 +384,6 @@ export class CustomMetrics {
         elt.count += point.count
         elt.sum += point.sum
 
-        if (
-            buffer.force ||
-            (buffer.sum && elt.sum >= buffer.sum) ||
-            (buffer.count && elt.count >= buffer.count) ||
-            now >= elt.timestamp
-        ) {
-            options = Object.assign({}, options, {timestamp: now * 1000})
-            let metric = await this.emitDimensionedMetric(namespace, metricName, elt, dimensions, options)
-            //  Reset tallies and save higher spans to return for future buffered metrics
-            elt.count = elt.sum = 0
-            elt.spans = metric.spans
-            elt.timestamp = now + (buffer.elapsed || this.spans[0].period / this.spans[0].samples)
-            return metric
-        }
         CustomMetrics.saveInstance({key}, this)
 
         return {
