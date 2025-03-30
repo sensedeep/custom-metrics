@@ -449,7 +449,7 @@ export class CustomMetrics {
                 Users may define a shorter TTL to prune metrics for inactive items.
             */
             if (ttl) {
-                //  MOB - is this a date, seconds or msec
+                //  Now and ttl are in seconds
                 metric.expires = now + ttl
             }
             if (await this.putMetric(metric, options)) {
@@ -831,7 +831,6 @@ export class CustomMetrics {
         }
         t = firstPoint
         for (let point of span.points) {
-            //  MOB - end was start + period, now end is closer
             if (start <= t && t < end) {
                 let value: number = undefined
                 /* istanbul ignore else */
@@ -989,7 +988,7 @@ export class CustomMetrics {
                 points.push({count: 0, sum: 0})
                 /*
                     This will set the span.end to the next aligned interval that is >timestamp
-                    NOTE: this may mean that span.start is set before now and before recorded time
+                    NOTE: this may mean that span.start is effectively before "now"
                  */
                 span.end = this.alignTime(span, timestamp + 1)
                 first = span.end - interval
@@ -1110,7 +1109,7 @@ export class CustomMetrics {
         return result
     }
 
-    private initMetric(owner: string, namespace: string, name: string, dimensions: string, now: number): Metric {
+    private initMetric(owner: string, namespace: string, name: string, dimensions: string, timestamp: number): Metric {
         let metric: Metric = {
             dimensions,
             metric: name,
@@ -1126,10 +1125,8 @@ export class CustomMetrics {
                 end: null,
                 points: [],
             }
-            //  This will set the span.end to the next aligned interval that is >timestamp
             let interval = span.period / span.samples
-            // span.end = this.alignTime(span, now + 1)
-            span.end = this.alignTime(span, now + interval)
+            span.end = this.alignTime(span, timestamp + interval)
             metric.spans.push(span)
         }
         return metric
@@ -1362,6 +1359,15 @@ export class CustomMetrics {
      */
     private alignTime(span: Span, timestamp: number): number {
         let interval = span.period / span.samples
+        /*
+            FUTURE Special case for yearly spans - get the last day of the month
+        if (span.period == 365 * 86400) {
+            let d = new Date(timestamp * 1000)
+            let next = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+            let last = new Date(next.getTime() - 86400 * 1000)
+            return last.getTime() / 1000
+        }
+         */
         return Math.ceil(timestamp / interval) * interval
     }
 
