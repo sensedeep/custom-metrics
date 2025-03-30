@@ -1126,7 +1126,7 @@ export class CustomMetrics {
                 points: [],
             }
             let interval = span.period / span.samples
-            span.end = this.alignTime(span, timestamp + interval)
+            span.end = this.alignTime(span, timestamp + interval - 1)
             metric.spans.push(span)
         }
         return metric
