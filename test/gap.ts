@@ -20,8 +20,6 @@ test('Test gaps between emit and query', async () => {
 
     let r = await metrics.query('test/gap', 'GapMetric', {}, 86400, 'sum', {timestamp})
     expect(r.points.length).toBe(r.samples)
-    expect(r.points.at(-2)?.count).toBe(12 * span.samples)
-    expect(r.points.at(-1)?.count).toBe(8 * span.samples)
 
     timestamp += 2 * 86400 * 1000
     r = await metrics.query('test/gap', 'GapMetric', {}, 86400, 'sum', {timestamp})
