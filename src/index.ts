@@ -699,9 +699,12 @@ export class CustomMetrics {
         }
         /*
             Aggregate data for all spans up to the desired span. Do this because spans are updated lazily on emit.
+            For accumulated 'current' queries, we search for the first current value from span 0 upwards.
          */
+        if (statistic == 'current' && options.accumulate) {
+            si = 0
+        }
         this.addValue(metric, now, {count: 0, sum: 0}, 0, si)
-
         let span = metric.spans[si]
         let result: MetricQueryResult
         if (options.accumulate) {
@@ -752,10 +755,19 @@ export class CustomMetrics {
         let points = span.points
         let interval = span.period / span.samples
         let t = span.end - span.points.length * interval
-        let last = points[points.length - 1]
-        if (statistic == 'current' && last.count > 0) {
-            value = last.sum
-            count = last.count
+
+        if (statistic == 'current') {
+            // Find the most recent point with a count > 0 and use it to calculate the current value.
+            for (let s of metric.spans) {
+                for (let p of s.points.reverse()) {
+                    if (p.count > 0) {
+                        value = p.sum / p.count
+                        count = p.count
+                        break
+                    }
+                }
+                if (count > 0) break
+            }
         } else {
             for (let i = 0; i < points.length; i++) {
                 let point = points[i]

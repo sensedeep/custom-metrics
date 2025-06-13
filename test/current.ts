@@ -15,16 +15,16 @@ test('Current test harness', async () => {
         if emitted inside the span interval.
      */
     //  Emit two points inside the span interval period
-    await metrics.emit('test/basic', 'FirstMetric', 2, [], {timestamp})
+    await metrics.emit('test/current', 'FirstMetric', 2, [], {timestamp})
     timestamp += 1000
-    await metrics.emit('test/basic', 'FirstMetric', 4, [], {timestamp})
+    await metrics.emit('test/current', 'FirstMetric', 4, [], {timestamp})
 
-    let r = await metrics.query('test/basic', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: true})
+    let r = await metrics.query('test/current', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: true})
     expect(r).toBeDefined()
     expect(r.period).toBe(span.period)
     expect(r.points).toBeDefined()
     expect(r.points.length).toBe(1)
-    expect(r.points[0].value).toBe(6)
+    expect(r.points[0].value).toBe(3)
     expect(r.points[0].count).toBe(2)
 
     //  Move to a new hour to expire the earlier points from the lowest span
@@ -34,11 +34,11 @@ test('Current test harness', async () => {
         Emit two metrics outside the span interval. The query should only return the most recent one.
      */
     //  Emit two metrics outside the span interval. 
-    await metrics.emit('test/basic', 'FirstMetric', 2, [], {timestamp})
+    await metrics.emit('test/current', 'FirstMetric', 2, [], {timestamp})
     timestamp += (span.period / span.samples + 1) * 1000
-    await metrics.emit('test/basic', 'FirstMetric', 4, [], {timestamp})
+    await metrics.emit('test/current', 'FirstMetric', 4, [], {timestamp})
 
-    r = await metrics.query('test/basic', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: true})
+    r = await metrics.query('test/current', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: true})
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[0].period)
     expect(r.points).toBeDefined()
@@ -51,17 +51,21 @@ test('Current test harness', async () => {
         Test the last interval is empty by doing non-accumulated query.
      */
     timestamp += span.period / span.samples * 1000
-    r = await metrics.query('test/basic', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: false})
-    dump(r)
+    r = await metrics.query('test/current', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: false})
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[0].period)
     expect(r.points.length).toBe(10)
     expect(r.points[9].count).toBe(0)
 
     //  Now test accumulated query.
-    r = await metrics.query('test/basic', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: true})
-    dump(r)
+    r = await metrics.query('test/current', 'FirstMetric', {}, 300, 'current', {timestamp, accumulate: true})
     expect(r.period).toBe(DefaultSpans[0].period)
+    expect(r.points.length).toBe(1)
+    expect(r.points[0].count).toBe(1)
+    expect(r.points[0].value).toBe(4)
+
+    //  When using a higher span, still should get the same result.
+    r = await metrics.query('test/current', 'FirstMetric', {}, 86400, 'current', {timestamp, accumulate: true})
     expect(r.points.length).toBe(1)
     expect(r.points[0].count).toBe(1)
     expect(r.points[0].value).toBe(4)
