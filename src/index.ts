@@ -752,37 +752,43 @@ export class CustomMetrics {
         let points = span.points
         let interval = span.period / span.samples
         let t = span.end - span.points.length * interval
-        for (let i = 0; i < points.length; i++) {
-            let point = points[i]
-            if (start <= t && t < start + period) {
-                if (statistic == 'max') {
-                    if (point.max != undefined) {
-                        value = Math.max(value, point.max)
-                    } else {
-                        //  For use to accumulate AWS metrics that don't keep min/max in points
-                        value = Math.max(value, point.sum / (point.count || 1))
+        let last = points[points.length - 1]
+        if (statistic == 'current' && last.count > 0) {
+            value = last.sum
+            count = last.count
+        } else {
+            for (let i = 0; i < points.length; i++) {
+                let point = points[i]
+                if (start <= t && t < start + period) {
+                    if (statistic == 'max') {
+                        if (point.max != undefined) {
+                            value = Math.max(value, point.max)
+                        } else {
+                            //  For use to accumulate AWS metrics that don't keep min/max in points
+                            value = Math.max(value, point.sum / (point.count || 1))
+                        }
+                    } else if (statistic == 'min') {
+                        if (point.min != undefined) {
+                            value = Math.min(value, point.min)
+                        } else {
+                            //  For use to accumulate AWS metrics that don't keep min/max in points
+                            value = Math.min(value, point.sum / (point.count || 1))
+                        }
+                    } else if (statistic == 'sum') {
+                        value += point.sum
+                    } else if (statistic == 'current') {
+                        value = point.sum / (point.count || 1)
+                    } else if (statistic == 'count') {
+                        value += point.count
+                    } else if (statistic.match(/^p[0-9]+/)) {
+                        pvalues = pvalues.concat(point.pvalues)
+                    } /* avg */ else {
+                        value += point.sum
                     }
-                } else if (statistic == 'min') {
-                    if (point.min != undefined) {
-                        value = Math.min(value, point.min)
-                    } else {
-                        //  For use to accumulate AWS metrics that don't keep min/max in points
-                        value = Math.min(value, point.sum / (point.count || 1))
-                    }
-                } else if (statistic == 'sum') {
-                    value += point.sum
-                } else if (statistic == 'current') {
-                    value = point.sum / (point.count || 1)
-                } else if (statistic == 'count') {
-                    value += point.count
-                } else if (statistic.match(/^p[0-9]+/)) {
-                    pvalues = pvalues.concat(point.pvalues)
-                } /* avg */ else {
-                    value += point.sum
+                    count += point.count
                 }
-                count += point.count
+                t += interval
             }
-            t += interval
         }
         if (statistic.match(/^p[0-9]+/)) {
             let p = parseInt(statistic.slice(1))

@@ -94,6 +94,7 @@ export type MetricListOptions = {
     limit?: number;
     owner?: string;
     next?: object;
+    timestamp?: number;
 };
 export type MetricQueryOptions = {
     accumulate?: boolean;
@@ -140,10 +141,12 @@ export declare class CustomMetrics {
     upgradeMetric(old: Metric): Metric;
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
-    flush(): Promise<void>;
-    flushElt(elt: BufferElt, timestamp: number): Promise<void>;
+    flush(options?: MetricQueryOptions): Promise<void>;
+    flushElt(elt: BufferElt, now: number): Promise<void>;
     getBufferKey(namespace: string, metricName: string, dimensions: string): string;
     query(namespace: string, metricName: string, dimensions: MetricDimensions, period: number, statistic: string, options?: MetricQueryOptions): Promise<MetricQueryResult>;
+    queryMetrics(namespace: string, metric: string | undefined, period: number, statistic: string, options?: MetricListOptions): Promise<MetricQueryResult[]>;
+    processMetric(metric: Metric, now: number, period: number, statistic: string, options: MetricQueryOptions): MetricQueryResult;
     private accumulateMetric;
     private calculateSeries;
     private makeDimensionString;
@@ -153,7 +156,7 @@ export declare class CustomMetrics {
     getMetricList(namespace?: string, metric?: string, options?: MetricListOptions): Promise<MetricList>;
     private initMetric;
     getMetric(owner: string, namespace: string, metric: string, dimensions: string, log: boolean): Promise<Metric>;
-    findMetrics(owner: string, namespace: string, metric: string | undefined, limit: number, startKey: object): Promise<{
+    findMetrics(owner: string, namespace: string, metric: string | undefined, limit: number, startKey: object, fields?: string): Promise<{
         items: Metric[];
         next: object;
         command: QueryCommand;
@@ -178,7 +181,7 @@ export declare class CustomMetrics {
     };
     static freeInstanceByKey(key: string): void;
     static saveInstance(tags: object, metrics: CustomMetrics): void;
-    private roundTime;
+    private alignTime;
     private assert;
     private info;
     private error;
