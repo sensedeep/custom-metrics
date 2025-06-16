@@ -42,7 +42,4 @@ test('Test query with start', async () => {
     expect(r.points.length).toBe(4)
     expect(r.points.at(-1)?.value).toBe(84)
     expect(r.points.at(-1)?.count).toBe(12)
-
-    //  MOB - more tests with start before spans
-    //  MOB test with start + period after ...
 })
