@@ -1099,7 +1099,7 @@ export class CustomMetrics {
         do {
             /* istanbul ignore next */
             ;({command, items, next} = await this.findMetrics(owner, namespace, metric, limit, next))
-            this.log[chan](`Find metrics ${namespace}, ${metric}`, {command, items})
+            this.log[chan](`Find metrics namespace: ${namespace}, metric: ${metric}`, {command, items})
             if (items.length) {
                 for (let item of items) {
                     let ns = (map[item.namespace] = map[item.namespace] || {})
