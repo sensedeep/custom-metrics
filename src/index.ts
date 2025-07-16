@@ -788,8 +788,6 @@ export class CustomMetrics {
                         }
                     } else if (statistic == 'sum') {
                         value += point.sum
-                    } else if (statistic == 'current') {
-                        value = point.sum / (point.count || 1)
                     } else if (statistic == 'count') {
                         value += point.count
                     } else if (statistic.match(/^p[0-9]+/)) {
@@ -880,6 +878,7 @@ export class CustomMetrics {
                         let nth = Math.min(Math.round((pvalues.length * p) / 100 + 1), pvalues.length - 1)
                         value = pvalues[nth]
                     } /* avg | current */ else {
+                        // NOTE: avg and current are the same for series
                         value = point.sum / point.count
                     }
                 } else {
