@@ -1,9 +1,9 @@
 /*
     start.ts - Test metric query with start time
  */
-import {client, table, CustomMetrics, DefaultSpans} from './utils/init'
+import {client, table, CustomMetrics, DefaultSpans, dumpQuery, dump} from './utils/init'
 
-// jest.setTimeout(7200 * 1000)
+jest.setTimeout(7200 * 1000)
 
 test('Test query with start', async () => {
     let metrics = new CustomMetrics({client, table, log: false})
@@ -19,6 +19,8 @@ test('Test query with start', async () => {
 
     //  Get last day
     let r = await metrics.query('test/query', 'StartMetric', {}, 86400, 'sum', {timestamp})
+    dumpQuery(r)
+    dump(r)
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[2].period)
     expect(r.points).toBeDefined()
