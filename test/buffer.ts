@@ -18,9 +18,8 @@ test('Test Buffer Basic', async () => {
         let metric = await metrics.emit('test/buffer', 'BasicMetric', 10, [], {buffer: {elapsed: 1800}, timestamp})
         expect(metric).toBeDefined()
         expect(metric.metric).toBe('BasicMetric')
-        expect(metric.spans.length).toBe(1)
-        expect(metric.spans[0].points.length).toBe(1)
-        expect(metric.spans[0].points[0].count).toBe(i + 1)
+        expect(metric.spans.length).toBe(6)
+        expect(metric.spans[0].points.length).toBe(i + 1)
         timestamp += interval * 1000
     }
     //  Query will flush
@@ -48,9 +47,8 @@ test('Test elapsed buffers', async () => {
         let metric = await metrics.emit('test/buffer', 'ElapsedMetric', 1, [], {buffer: {elapsed: 1800}, timestamp})
         expect(metric).toBeDefined()
         expect(metric.metric).toBe('ElapsedMetric')
-        expect(metric.spans.length).toBe(1)
-        expect(metric.spans[0].points.length).toBe(1)
-        expect(metric.spans[0].points[0].count).toBe(i + 1)
+        expect(metric.spans.length).toBe(6)
+        expect(metric.spans[0].points.length).toBe(i + 1)
         timestamp += interval * 1000
     }
     /*
@@ -123,7 +121,7 @@ test('Buffered metric return', async () => {
         })
         if (i < 4) {
             expect(metric).toBeDefined()
-            expect(metric.spans.length).toBe(1)
+            expect(metric.spans.length).toBe(6)
         } else {
             expect(metric.spans.length).toBe(6)
         }

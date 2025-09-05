@@ -34,8 +34,8 @@ test('Test query period', async () => {
         metric = await metrics.emit('test/query', 'PeriodMetric', 7, [], {timestamp})
         timestamp += 30 * 1000
     }
-    // timestamp -= 30 * 1000
     expect(metric.spans[0].points.length).toBe(10)
+    timestamp -= 30 * 1000
 
     //  With a period shorter than the lowest span - only one interval
     let r = await metrics.query('test/query', 'PeriodMetric', {}, 30, 'sum', {timestamp})

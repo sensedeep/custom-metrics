@@ -42,7 +42,7 @@ export type MetricList = {
 export type MetricQueryPoint = {
     count: number;
     timestamp?: number;
-    value?: number;
+    value: number;
 };
 export type MetricQueryResult = {
     dimensions: MetricDimensions;
@@ -107,9 +107,9 @@ export type MetricQueryOptions = {
 type BufferElt = {
     count: number;
     dimensions: string;
-    metric: string;
+    metricName: string;
     namespace: string;
-    spans: Span[];
+    metric: Metric;
     sum: number;
     timestamp: number;
     elapsed: number;
@@ -136,22 +136,24 @@ export declare class CustomMetrics {
     emit(namespace: string, metricName: string, value: number, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;
     private emitDimensions;
     bufferMetric(namespace: string, metricName: string, point: Point, dimensions: string, options: MetricEmitOptions): Promise<Metric>;
+    getBufferedMetric(owner: string, namespace: string, metricName: string, dimensions: string, options: MetricEmitOptions): Promise<BufferElt>;
     private emitDimensionedMetric;
     upgrade(namespace: string, metricName: string, dimensionsList?: MetricDimensionsList, options?: MetricEmitOptions): Promise<Metric>;
     upgradeMetric(old: Metric): Metric;
     static terminate(): Promise<void>;
     static flushAll(): Promise<void>;
     flush(options?: MetricQueryOptions): Promise<void>;
-    flushElt(elt: BufferElt, now: number): Promise<void>;
+    flushElt(elt: BufferElt, timestamp: number): Promise<void>;
     getBufferKey(namespace: string, metricName: string, dimensions: string): string;
     query(namespace: string, metricName: string, dimensions: MetricDimensions, period: number, statistic: string, options?: MetricQueryOptions): Promise<MetricQueryResult>;
     queryMetrics(namespace: string, metric: string | undefined, period: number, statistic: string, options?: MetricListOptions): Promise<MetricQueryResult[]>;
-    processMetric(metric: Metric, now: number, period: number, statistic: string, options: MetricQueryOptions): MetricQueryResult;
+    processMetric(metric: Metric, period: number, statistic: string, timestamp: number, options: MetricQueryOptions): MetricQueryResult;
     private accumulateMetric;
     private calculateSeries;
     private makeDimensionString;
     private makeDimensionObject;
     private addValue;
+    private updateSpan;
     private setPoint;
     getMetricList(namespace?: string, metric?: string, options?: MetricListOptions): Promise<MetricList>;
     private initMetric;
@@ -179,6 +181,9 @@ export declare class CustomMetrics {
         seq: number;
         _source: string;
     };
+    formatDate(n: number): string;
+    metricToString(metric: Metric): string;
+    queryToString(metric: MetricQueryResult): string;
     static freeInstanceByKey(key: string): void;
     static saveInstance(tags: object, metrics: CustomMetrics): void;
     private alignTime;

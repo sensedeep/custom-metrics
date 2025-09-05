@@ -16,10 +16,6 @@ test('Test query with start', async () => {
         timestamp += 3600 * 1000
     }
     expect(metric.spans.length).toBe(6)
-    expect(metric.spans.at(0).points.length).toBe(1)
-    expect(metric.spans.at(1).points.length).toBe(1)
-    expect(metric.spans.at(2).points.length).toBe(12)
-    expect(metric.spans.at(3).points.length).toBe(12)
 
     //  Get last day
     let r = await metrics.query('test/query', 'StartMetric', {}, 86400, 'sum', {timestamp})

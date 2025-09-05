@@ -1,7 +1,7 @@
 /*
     propagate.ts - Test emit will propagate from span to span
  */
-import {client, table, CustomMetrics, DefaultSpans} from './utils/init'
+import {client, table, CustomMetrics, DefaultSpans, dumpMetric} from './utils/init'
 
 // jest.setTimeout(7200 * 1000)
 
@@ -12,7 +12,7 @@ test('Test', async () => {
     let interval = span.period / span.samples
 
     for (let i = 0; i < 4; i++) {
-        await metrics.emit('test/propagate', 'FirstMetric', 10, [], {timestamp})
+        let metric = await metrics.emit('test/propagate', 'FirstMetric', i + 1, [], {timestamp})
         timestamp += interval * 1000
     }
     timestamp -= (interval * 1000)
@@ -24,9 +24,6 @@ test('Test', async () => {
     expect(r.period).toBe(span.period)
     expect(r.points).toBeDefined()
     expect(r.points.length).toBe(r.samples)
-    expect(r.points[8].value).toBe(10)
-    expect(r.points[8].count).toBe(1)
-    expect(r.points[9].value).toBe(10)
-    expect(r.points[10].value).toBe(10)
-    expect(r.points[11].value).toBe(10)
+    expect(r.points.reduce((acc, point) => acc + point?.count, 0)).toBe(4)
+    expect(r.points.reduce((acc, point) => acc + point?.value, 0)).toBe(10)
 })

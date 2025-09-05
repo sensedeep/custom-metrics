@@ -28,7 +28,6 @@ function dt(n: number) {
     return fmtdate(n * 1000)
 }
 
-
 const dump = (...args) => {
     let s: string[] = []
     for (let item of args) {
@@ -51,7 +50,7 @@ const dump = (...args) => {
 
 const dumpMetric = function (metric: Metric) {
     let buf: string[] = []
-    buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)}`)
+    buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions) || ''}`)
     for (let span of metric.spans) {
         let interval = span.period / span.samples
         let start = span.end - span.points.length * interval

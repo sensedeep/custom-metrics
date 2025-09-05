@@ -1,6 +1,10 @@
 #
 #	Makefile for CustomMetrics
 #
+PATH	:= ./node_modules/.bin:$(PATH)
+
+export	PATH
+
 all: build
 
 .PHONY: always
@@ -14,10 +18,10 @@ publish promote: build cov
 	coveralls < coverage/lcov.info
 
 test: always
-	jest --runInBand
+	npm run test
 
 cov:
-	jest --runInBand --coverage
+	npm run test-cov
 
 pubcov: cov
 	coveralls < coverage/lcov.info

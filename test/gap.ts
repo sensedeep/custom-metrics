@@ -12,15 +12,18 @@ test('Test gaps between emit and query', async () => {
     let interval = span.period / span.samples
 
     let metric
-    for (let i = 0; i < span.samples * 20; i++) {
+    for (let i = 0; i < span.samples * 10; i++) {
         metric = await metrics.emit('test/gap', 'GapMetric', 10, [], {timestamp})
         timestamp += interval * 1000
     }
-    expect(metric.spans[2].points.length).toBe(1)
-
     let r = await metrics.query('test/gap', 'GapMetric', {}, 86400, 'sum', {timestamp})
     expect(r.points.length).toBe(r.samples)
+    expect(r.points[11].count).toBe(100)
+    expect(r.points[11].value).toBe(1000)
 
+    /*
+        Query two days later
+     */
     timestamp += 2 * 86400 * 1000
     r = await metrics.query('test/gap', 'GapMetric', {}, 86400, 'sum', {timestamp})
     expect(r.points.length).toBe(r.samples)
@@ -86,16 +89,16 @@ test('Test that points before data and after data are filled', async () => {
 
     //  Emit two data values separated by point gaps
     let metric = await metrics.emit('test/gap', 'FillMetric', 10, [], {timestamp})
-    timestamp += 2 * interval * 1000
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[0].points[0].sum).toBe(10)
     expect(metric.spans[1].points.length).toBe(0)
 
+    timestamp += 2 * interval * 1000
     metric = await metrics.emit('test/gap', 'FillMetric', 20, [], {timestamp})
 
+    // Will get padding in the hours [1] span up to the timestamp
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[0].points[0].sum).toBe(20)
-    expect(metric.spans[1].points.length).toBe(1)
     expect(metric.spans[1].points[0].sum).toBe(10)
 
     let r = await metrics.query('test/gap', 'FillMetric', {}, 3600, 'sum', {timestamp})
