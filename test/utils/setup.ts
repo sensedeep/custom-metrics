@@ -14,7 +14,7 @@ module.exports = async () => {
      */
     let dynamodb = DynamoDbLocal.spawn({port: PORT})
     console.info('\nSpawn DynamoDB', dynamodb.pid)
-    await waitPort({host: '0.0.0.0', port: PORT, timeout: 10000})
+    await waitPort({host: '0.0.0.0', port: PORT, timeout: 30000})
     process.env.DYNAMODB_PID = String(dynamodb.pid)
     process.env.DYNAMODB_PORT = String(PORT)
 
