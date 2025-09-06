@@ -584,65 +584,69 @@ class CustomMetrics {
             if (si < queryIndex && si + 1 < spans.length) {
                 shift = points.length;
             }
-            else if (timestamp >= start) {
-                shift = Math.floor((timestamp - start) / interval) - span.samples;
-                if (point.count && timestamp >= span.end) {
-                    shift += 1;
-                }
+            else if (timestamp >= (start + span.period)) {
+                let when = point.count ? (timestamp + interval) : timestamp;
+                shift = Math.ceil((when - start) / interval) - span.samples;
             }
             shift = Math.max(0, Math.min(shift, points.length));
         }
         if (shift > 0) {
-            let t = start;
             for (let i = 0; i < shift; i++) {
                 let p = points.shift();
                 if (p.count && si < spans.length - 1) {
-                    p.timestamp = t;
+                    p.timestamp = start;
                     this.addValue(spans, p, timestamp, si + 1, queryIndex);
                 }
-                t += interval;
+                start += interval;
             }
+        }
+        if (points.length == 0) {
+            span.end = this.alignTime(span, timestamp);
         }
         if (queryIndex >= 0 && si < queryIndex) {
             this.addValue(spans, point, timestamp, si + 1, queryIndex);
             return;
         }
         if (si < spans.length - 1) {
-            if (point.timestamp) {
-                let elapsed = (timestamp - point.timestamp);
-                let target = spans.findIndex(s => s.period >= elapsed);
-                if (target > si) {
-                    this.addValue(spans, point, timestamp, si + 1, queryIndex);
-                    return;
-                }
-            }
-            if ((si + 1) < spans.length - 1) {
+            let count = spans.slice(si + 1, -1).reduce((acc, s) => acc + s.points.length, 0);
+            if (count > 0) {
                 this.addValue(spans, { count: 0, sum: 0 }, timestamp, si + 1, queryIndex);
             }
         }
-        let index = this.updateSpan(span, point, timestamp);
-        if (point.count && index >= 0) {
-            this.setPoint(span, index, point);
+        if (point.count) {
+            let earliest = span.end - span.period;
+            let when = point.timestamp || timestamp;
+            if (when < earliest && points.length > 0) {
+                let target = spans.slice(si + 1).findIndex((s) => s.end - s.period <= when);
+                if (target > si) {
+                    this.addValue(spans, point, timestamp, si + 1, queryIndex);
+                }
+                else {
+                }
+            }
+            else {
+                let index = this.makeSpanRoom(span, point, timestamp);
+                if (index >= 0) {
+                    this.setPoint(span, index, point);
+                }
+            }
         }
     }
-    updateSpan(span, point, timestamp) {
+    makeSpanRoom(span, point, timestamp) {
         let interval = span.period / span.samples;
         let points = span.points || [];
         let start = span.end - points.length * interval;
         let when = point.timestamp || timestamp;
-        let index;
+        let index = -1;
         if (points.length == 0) {
+            span.end = this.alignTime(span, when + 1);
             if (point.count) {
                 points.push({ count: 0, sum: 0 });
+                index = 0;
             }
-            span.end = this.alignTime(span, when + 1);
-            index = 0;
         }
-        else {
-            if (when < span.end - span.period) {
-                return -1;
-            }
-            while (when < start) {
+        else if (point.count) {
+            while (when < start && points.length < span.samples) {
                 points.unshift({ count: 0, sum: 0 });
                 start -= interval;
             }
@@ -651,11 +655,14 @@ class CustomMetrics {
                 span.end += interval;
             }
             index = Math.floor((when - start) / interval);
+            this.assert(when < span.end);
+            this.assert(index < span.samples);
         }
         if (points.length > span.samples) {
+            this.assert(points.length <= span.samples);
             points = points.slice(-span.samples);
         }
-        this.assert(0 <= index && index < points.length);
+        this.assert(-1 <= index && index < points.length);
         return index;
     }
     setPoint(span, index, add) {
@@ -937,42 +944,6 @@ class CustomMetrics {
         }
         return result;
     }
-    formatDate(n) {
-        function padTo2Digits(num) {
-            return num.toString().padStart(2, '0');
-        }
-        let date = new Date(n);
-        const year = date.getFullYear().toString().slice(-2);
-        const month = padTo2Digits(date.getMonth() + 1);
-        const day = padTo2Digits(date.getDate());
-        const hours = padTo2Digits(date.getHours());
-        const minutes = padTo2Digits(date.getMinutes());
-        const seconds = padTo2Digits(date.getSeconds());
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    }
-    metricToString(metric) {
-        let buf = [];
-        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions) || ''}`);
-        for (let span of metric.spans) {
-            let interval = span.period / span.samples;
-            let start = span.end - span.points.length * interval;
-            buf.push(` ${span.period} secs ${this.formatDate(start * 1000)} => ` +
-                `${this.formatDate(span.end * 1000)} ${span.points.length} points`);
-            for (let point of span.points) {
-                buf.push(`     count ${point.count} = sum ${point.sum}`);
-            }
-        }
-        return buf.join('\n');
-    }
-    queryToString(metric) {
-        let points = metric.points.slice(0);
-        let buf = [];
-        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${points.length} points`);
-        for (let point of points) {
-            buf.push(`     ${this.formatDate(point.timestamp || 0)} = ${point.value || '-'} / ${point.count}`);
-        }
-        return buf.join('\n');
-    }
     static freeInstanceByKey(key) {
         delete Instances[key];
     }
@@ -1019,6 +990,42 @@ class CustomMetrics {
         return new Promise(function (resolve, reject) {
             setTimeout(() => resolve(true), time);
         });
+    }
+    formatDate(n) {
+        function padTo2Digits(num) {
+            return num.toString().padStart(2, '0');
+        }
+        let date = new Date(n);
+        const year = date.getUTCFullYear().toString().slice(-2);
+        const month = padTo2Digits(date.getUTCMonth() + 1);
+        const day = padTo2Digits(date.getUTCDate());
+        const hours = padTo2Digits(date.getUTCHours());
+        const minutes = padTo2Digits(date.getUTCMinutes());
+        const seconds = padTo2Digits(date.getUTCSeconds());
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    }
+    metricToString(metric) {
+        let buf = [];
+        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions) || ''}`);
+        for (let span of metric.spans) {
+            let interval = span.period / span.samples;
+            let start = span.end - span.points.length * interval;
+            buf.push(` ${span.period} secs ${this.formatDate(start * 1000)} => ` +
+                `${this.formatDate(span.end * 1000)} ${span.points.length} points`);
+            for (let point of span.points) {
+                buf.push(`     count ${point.count} = sum ${point.sum}`);
+            }
+        }
+        return buf.join('\n');
+    }
+    queryToString(metric) {
+        let points = metric.points.slice(0);
+        let buf = [];
+        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${points.length} points`);
+        for (let point of points) {
+            buf.push(`     ${this.formatDate(point.timestamp || 0)} = ${point.value || '-'} / ${point.count}`);
+        }
+        return buf.join('\n');
     }
 }
 exports.CustomMetrics = CustomMetrics;

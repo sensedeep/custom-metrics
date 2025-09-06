@@ -980,13 +980,13 @@ export class CustomMetrics {
         if (points.length) {
             if (si < queryIndex && si + 1 < spans.length) {
                 shift = points.length
-            } else if (timestamp >= start) {
-                //  Count of aged data points
-                shift = Math.floor((timestamp - start) / interval) - span.samples
-                if (point.count && timestamp >= span.end) {
-                    //  Add one more to make room for this point being added
-                    shift += 1
-                }
+            } else if (timestamp >= (start + span.period)) {
+                /*
+                    Some points have aged beyond the span period and need to be moved to a higher span.
+                    If emitting a point, we may need to shift by one more interval to make room for it.
+                 */
+                let when = point.count ? (timestamp + interval): timestamp
+                shift = Math.ceil((when - start) / interval) - span.samples
             }
             shift = Math.max(0, Math.min(shift, points.length))
         }
@@ -994,57 +994,62 @@ export class CustomMetrics {
             Move aged points to the next span 
          */
         if (shift > 0) {
-            let t = start
             for (let i = 0; i < shift; i++) {
+                // Pop off the oldest point at the start of the points[]
                 let p = points.shift()
                 if (p.count && si < spans.length - 1) {
-                    p.timestamp = t
+                    p.timestamp = start
                     this.addValue(spans, p, timestamp, si + 1, queryIndex)
                 }
-                t += interval
+                start += interval
             }
-        } 
+        }
+        if (points.length == 0) {
+            span.end = this.alignTime(span, timestamp)
+        }
         if (queryIndex >= 0 && si < queryIndex) {
             this.addValue(spans, point, timestamp, si + 1, queryIndex)
             return
         }
+        /*
+            Aggregate higher spans if required
+         */
         if (si < spans.length - 1) {
-            /*
-                Check if the point is destined for a higher span
-             */
-            if (point.timestamp) {
-                let elapsed = (timestamp - point.timestamp)
-                let target = spans.findIndex(s => s.period >= elapsed)
-                if (target > si) {
-                    this.addValue(spans, point, timestamp, si + 1, queryIndex)
-                    return
-                }
-            }
-            /*
-                Aggregate and update higher spans
-             */
-            if ((si + 1) < spans.length - 1) {
+            let count = spans.slice(si + 1, -1).reduce((acc, s) => acc + s.points.length, 0)
+            if (count > 0) {
                 this.addValue(spans, {count: 0, sum: 0}, timestamp, si + 1, queryIndex)
             }
         }
         /*
-            Update the span.end for the current timestamp
+            Update the span points and span.end for the current timestamp
          */
-        let index = this.updateSpan(span, point, timestamp)
-
-        /*
-            Insert any data point values
-         */
-        if (point.count && index >= 0) {
-            this.setPoint(span, index, point)
+        if (point.count) {
+            /*
+                Check if this point is earlier than this span could ever be, if so, find a higher span that can accommodate it.
+             */
+            let earliest = span.end - span.period
+            let when = point.timestamp || timestamp
+            if (when < earliest && points.length > 0) {
+                let target = spans.slice(si + 1).findIndex((s) => s.end - s.period <= when)
+                if (target > si) {
+                    this.addValue(spans, point, timestamp, si + 1, queryIndex)
+                } else {
+                    // Discard point that is too early
+                }
+            } else {
+                let index = this.makeSpanRoom(span, point, timestamp)
+                if (index >= 0) {
+                    this.setPoint(span, index, point)
+                }
+            }
         }
     }
 
     /*
-        Update the span with room to accomodate the (optional) data point and return the insertion index.
+        Make room in the span to accomodate the data point and return the point index to update with the data.
         This will update the span.end if required.
      */
-    private updateSpan(span: Span, point: Point, timestamp: number) {
+    private makeSpanRoom(span: Span, point: Point, timestamp: number) {
         let interval = span.period / span.samples
         let points = span.points || []
         let start = span.end - points.length * interval
@@ -1052,21 +1057,17 @@ export class CustomMetrics {
         let index: number = -1
 
         if (points.length == 0) {
-            if (point.count) {
-                points.push({count: 0, sum: 0})
-            }
             /*
                 This will set the span.end to the next aligned interval that is >timestamp.
                 This may mean that span.start is effectively before "now".
             */
             span.end = this.alignTime(span, when + 1)
-            index = 0
-        } else {
-            if (when < span.end - span.period) {
-                //  Discard if before the earliest possible point for the span (not an error)
-                return -1
+            if (point.count) {
+                points.push({count: 0, sum: 0})
+                index = 0
             }
-            while (when < start) {
+        } else if (point.count) {
+            while (when < start && points.length < span.samples) {
                 points.unshift({count: 0, sum: 0})
                 start -= interval
             }

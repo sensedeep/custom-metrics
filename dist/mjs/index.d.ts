@@ -153,7 +153,7 @@ export declare class CustomMetrics {
     private makeDimensionString;
     private makeDimensionObject;
     private addValue;
-    private updateSpan;
+    private makeSpanRoom;
     private setPoint;
     getMetricList(namespace?: string, metric?: string, options?: MetricListOptions): Promise<MetricList>;
     private initMetric;
@@ -181,9 +181,6 @@ export declare class CustomMetrics {
         seq: number;
         _source: string;
     };
-    formatDate(n: number): string;
-    metricToString(metric: Metric): string;
-    queryToString(metric: MetricQueryResult): string;
     static freeInstanceByKey(key: string): void;
     static saveInstance(tags: object, metrics: CustomMetrics): void;
     private alignTime;
@@ -194,5 +191,8 @@ export declare class CustomMetrics {
     round(n: number): number;
     jitter(msecs: number): number;
     delay(time: number): Promise<boolean>;
+    formatDate(n: number): string;
+    metricToString(metric: Metric): string;
+    queryToString(metric: MetricQueryResult): string;
 }
 export {};
