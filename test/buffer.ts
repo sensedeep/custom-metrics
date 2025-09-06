@@ -7,7 +7,7 @@ import {client, table, CustomMetrics, DefaultSpans, log, dump, dumpMetric, dumpQ
 
 test('Test Buffer Basic', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
 
@@ -36,7 +36,7 @@ test('Test Buffer Basic', async () => {
 
 test('Test elapsed buffers', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
 
@@ -87,7 +87,7 @@ test('Test buffer API', async () => {
 
 test('Test stale buffered data', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
 
     //  Emit a non-buffered metric and query
     let metric = await metrics.emit('test/buffer', 'StaleMetric', 7, [], {timestamp})
@@ -111,7 +111,7 @@ test('Test stale buffered data', async () => {
 
 test('Buffered metric return', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let interval = 1
 
     for (let i = 0; i < 5; i++) {

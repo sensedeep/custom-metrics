@@ -15,12 +15,12 @@ function fmtdate(n) {
         return num.toString().padStart(2, '0')
     }
     let date = new Date(n)
-    const year = date.getFullYear().toString().slice(-2) // Get last two digits of the year
-    const month = padTo2Digits(date.getMonth() + 1) // Months are zero-indexed
-    const day = padTo2Digits(date.getDate())
-    const hours = padTo2Digits(date.getHours())
-    const minutes = padTo2Digits(date.getMinutes())
-    const seconds = padTo2Digits(date.getSeconds())
+    const year = date.getUTCFullYear().toString().slice(-2) // Get last two digits of the year
+    const month = padTo2Digits(date.getUTCMonth() + 1) // Months are zero-indexed
+    const day = padTo2Digits(date.getUTCDate())
+    const hours = padTo2Digits(date.getUTCHours())
+    const minutes = padTo2Digits(date.getUTCMinutes())
+    const seconds = padTo2Digits(date.getUTCSeconds())
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 

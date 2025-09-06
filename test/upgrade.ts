@@ -3,7 +3,7 @@
  */
 import {client, table, CustomMetrics, SpanDef, log, dump, dumpMetric} from './utils/init'
 
-jest.setTimeout(7200 * 1000)
+// jest.setTimeout(7200 * 1000)
 
 const LessSpans: SpanDef[] = [
     {period: 24 * 60 * 60, samples: 12}, // 86400, 24 hrs, interval: 2 hrs
@@ -24,10 +24,10 @@ const MoreSpans: SpanDef[] = [
 
 test('Upgrade Spans', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
 
     /*
-        Populate with 4 x 7
+        Populate with 7, over 4 intervals
      */
     let metric
     let count = 4

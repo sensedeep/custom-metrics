@@ -8,7 +8,7 @@ import {client, table, CustomMetrics, DefaultSpans, dump, dumpMetric, print} fro
 test('Test basic query', async () => {
     let metrics = new CustomMetrics({client, table, log: false})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric
     for (let i = 0; i < 10; i++) {
         metric = await metrics.emit('test/query', 'BasicMetric', 7, [], {timestamp})
@@ -28,7 +28,7 @@ test('Test basic query', async () => {
 test('Test query period', async () => {
     let metrics = new CustomMetrics({client, table, log: false})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric
     for (let i = 0; i < 10; i++) {
         metric = await metrics.emit('test/query', 'PeriodMetric', 7, [], {timestamp})
@@ -68,7 +68,7 @@ test('Test query period', async () => {
 
 test('Test query statistics', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
 
@@ -116,7 +116,7 @@ test('Test query statistics', async () => {
 
 test('Test query statistics with accumulate', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
 
@@ -156,7 +156,7 @@ test('Test query statistics with accumulate', async () => {
 
 test('Test query p values', async () => {
     let metrics = new CustomMetrics({client, table, pResolution: 10})
-    // let timestamp = new Date(2000, 0, 1).getTime()
+    // let timestamp = Date.UTC(2000, 0, 1)
 
     for (let i = 0; i < 10; i++) {
         await metrics.emit('test/query', 'PMetric', i, [])
@@ -177,7 +177,7 @@ test('Test query p values', async () => {
 
 test('Test missing metrics', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
 
     //  Missing namespace
     let r = await metrics.query('Unknown', 'Unknown', {}, 300, 'avg', {timestamp})
@@ -196,20 +196,20 @@ test('Test missing metrics', async () => {
 test('Test query with non-standard period', async () => {
     let metrics = new CustomMetrics({client, table, log: false})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric
     for (let i = 0; i < 140; i++) {
-        metric = await metrics.emit('test/query', 'BasicMetric', 7, [], {timestamp})
+        metric = await metrics.emit('test/query', 'NonStandard', 7, [], {timestamp})
         timestamp += 30 * 1000
     }
-    // timestamp -= 30 * 1000
+    timestamp -= 30 * 1000
     expect(metric.spans[0].points.length).toBe(10)
 
     /*
         Query 15 minutes
         This will return 3 points from the next span up (1 hr)
      */
-    let r = await metrics.query('test/query', 'BasicMetric', {}, 900, 'sum', {timestamp})
+    let r = await metrics.query('test/query', 'NonStandard', {}, 900, 'sum', {timestamp})
     expect(r).toBeDefined()
     expect(r.period).toBe(DefaultSpans[1].period)
     expect(r.points).toBeDefined()

@@ -12,12 +12,15 @@ import {client, table, CustomMetrics, log, dumpMetric, dumpQuery} from './utils/
 test('Test unbuffered', async () => {
     let metrics = new CustomMetrics({client, table})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
+
+    // Emit value 10
     let metric = await metrics.emit('test/debug', 'Unbuffered', 10, [], {timestamp})
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[0].points[0].count).toBe(1)
     expect(metric.spans[0].points[0].sum).toBe(10)
 
+    // Emit value 10 one interval later
     timestamp += 30 * 1000
     metric = await metrics.emit('test/debug', 'Unbuffered', 10, [], {timestamp})
     expect(metric.spans[0].points.length).toBe(2)
@@ -28,21 +31,20 @@ test('Test unbuffered', async () => {
     /*
         Test that the data points are returned
      */
-    timestamp += 30 * 1000
     let r = await metrics.query('test/debug', 'Unbuffered', {}, 86400, 'sum', {timestamp})
     expect(r.points.length).toBe(12)
     expect(r.points[11].value).toBe(20)
     expect(r.points[11].count).toBe(2)
 
     /*
-        Emit another value to test the prior data points are returned
+        Emit another value 12 hours later to test the prior data points are returned
      */
     timestamp += 12 * 3600 * 1000
     metric = await metrics.emit('test/debug', 'Unbuffered', 100, [], {timestamp})
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[0].points[0].count).toBe(1)
     expect(metric.spans[0].points[0].sum).toBe(100)
-    expect(metric.spans[2].points.length).toBe(7)
+    expect(metric.spans[2].points.length).toBe(1)
     expect(metric.spans[2].points[0].count).toBe(2)
     expect(metric.spans[2].points[0].sum).toBe(20)
 
@@ -62,7 +64,7 @@ test('Test buffered', async () => {
     /*
         Emit two buffered data points
      */
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric = await metrics.emit('test/debug', 'Buffered', 10, [], {timestamp, buffer: {count: 10}})
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[0].points[0].count).toBe(1)
@@ -98,7 +100,7 @@ test('Test buffered', async () => {
     expect(metric.spans[0].points.length).toBe(1)
     expect(metric.spans[0].points[0].count).toBe(1)
     expect(metric.spans[0].points[0].sum).toBe(100)
-    expect(metric.spans[2].points.length).toBe(7)
+    expect(metric.spans[2].points.length).toBe(1)
 
     /*
         Query all results

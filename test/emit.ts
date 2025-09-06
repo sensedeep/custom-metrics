@@ -7,7 +7,7 @@ import {client, table, CustomMetrics, DefaultSpans, log} from './utils/init'
 
 test('Test basic emit', async () => {
     let metrics = new CustomMetrics({client, table, owner: 'service', log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric = await metrics.emit('test/emit', 'FirstMetric', 10, [], {timestamp})
     expect(metric).toBeDefined()
     expect(metric.namespace).toBe('test/emit')
@@ -44,7 +44,7 @@ test('Test basic emit', async () => {
 
 test('Test emit with dimensions', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
 
     await metrics.emit('test/emit', 'Launches', 10, [{}, {Rocket: 'SaturnV'}], {timestamp})
     await metrics.emit('test/emit', 'Launches', 10, [{}, {Rocket: 'Falcon9'}], {timestamp})
@@ -79,7 +79,7 @@ test('Test emit with dimensions', async () => {
 
 test('Emit Series', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
 

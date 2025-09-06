@@ -7,7 +7,7 @@ import {client, table, CustomMetrics, log, dump} from './utils/init'
 
 test('Basic test harness', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
 
     //  This first emit will initialize the metric
     let metric = await metrics.emit('test/basic', 'FirstMetric', 10, [], {timestamp})

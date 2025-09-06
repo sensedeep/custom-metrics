@@ -26,7 +26,7 @@ test('Constructor with custom spans', async () => {
     const Spans = [{period: 86400, samples: 24}]
     let metrics = new CustomMetrics({client, table, spans: Spans})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric
     for (let i = 0; i < 26; i++) {
         metric = await metrics.emit('test/custom', 'CustomMetric', 10, [], {timestamp})

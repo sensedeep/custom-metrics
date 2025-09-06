@@ -7,7 +7,7 @@ jest.setTimeout(7200 * 1000)
 
 test('Current test harness', async () => {
     let metrics = new CustomMetrics({client, table, log: true})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
 
     /*

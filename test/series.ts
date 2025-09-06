@@ -7,7 +7,7 @@ import {client, table, CustomMetrics, DefaultSpans, dumpMetric} from './utils/in
 
 test('Test query with series', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[2]
     let interval = span.period / span.samples
 

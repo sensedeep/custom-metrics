@@ -21,7 +21,7 @@ export const Spans: SpanDef[] = [
 
 test('Basic test harness', async () => {
     let metrics = new CustomMetrics({client, table, log: true, spans: Spans})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let interval = 60 * 15
 
     for (let i = 0; i < 10; i++) {

@@ -7,7 +7,7 @@ import {client, table, CustomMetrics, DefaultSpans, dumpMetric} from './utils/in
 
 test('Test gaps between emit and query', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[0]
     let interval = span.period / span.samples
 
@@ -36,7 +36,7 @@ test('Test data aging beyond highest span', async () => {
     const Spans = [{period: 3600, samples: 4}]
     let metrics = new CustomMetrics({client, table, owner: 'service2', log: false, spans: Spans})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = Spans[0]
     let interval = span.period / span.samples
 
@@ -58,7 +58,7 @@ test('Test predated data', async() => {
     let metrics = new CustomMetrics({client, table})
 
     //  Get at least one point in the span
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let metric = await metrics.emit('test/gap', 'PreDate', 1, [], {timestamp})
     expect(metric).toBeDefined()
 
@@ -81,7 +81,7 @@ test('Test predated data', async() => {
 
 test('Test that points before data and after data are filled', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime() + 10 * 3600 * 1000
+    let timestamp = Date.UTC(2000, 0, 1) + 10 * 3600 * 1000
 
     //  Use the hour span
     let span = DefaultSpans[1]

@@ -7,7 +7,7 @@ import {client, table, CustomMetrics, DefaultSpans, dumpMetric, dumpQuery} from 
 
 test('Test that points before data and after data are filled', async () => {
     let metrics = new CustomMetrics({client, table})
-    let timestamp = new Date(2000, 0, 1).getTime() + 10 * 3600 * 1000
+    let timestamp = Date.UTC(2000, 0, 1) + 10 * 3600 * 1000
 
     //  Use the year span
     let span = DefaultSpans[5]

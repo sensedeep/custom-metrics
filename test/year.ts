@@ -8,7 +8,7 @@ import {client, table, CustomMetrics, DefaultSpans, log, dump, dumpMetric, dumpQ
 test('Test year span', async () => {
     let metrics = new CustomMetrics({client, table, owner: 'service', log: true})
 
-    let timestamp = new Date(2000, 0, 1).getTime()
+    let timestamp = Date.UTC(2000, 0, 1)
     let span = DefaultSpans[5]
     let interval = span.period / span.samples
 
