@@ -2,7 +2,7 @@
 
 ![CustomMetrics](https://www.sensedeep.com/images/metrics.png)
 
-## Low cost, fast, simple, scalable metrics for AWS
+## Low-cost, fast, simple, scalable metrics for AWS
 
 <!--
 [![Build Status](https://img.shields.io/github/actions/workflow/status/sensedeep/custom-metrics/build.yml?branch=main)](https://img.shields.io/github/actions/workflow/status/sensedeep/custom-metrics/build.yml?branch=main)
@@ -11,43 +11,46 @@
 [![Coverage Status](https://coveralls.io/repos/github/sensedeep/custom-metrics/badge.svg?branch=main)](https://coveralls.io/github/sensedeep/custom-metrics?branch=main)
 -->
 
-CustomMetrics is a NodeJS library to emit and query custom metrics for AWS apps. 
+CustomMetrics is a NodeJS library for emitting and querying custom metrics for AWS apps at scale.  
 
-It provides more efficient, scalable metrics that are dramatically less expensive and faster than standard AWS CloudWatch metrics. 
+CustomMetrics provides highly efficient, vastly scalable metrics that are dramatically less expensive and faster than standard AWS CloudWatch metrics. 
 
 ## Background
 
-AWS CloudWatch offers metrics to monitor AWS services and your apps. Unfortunately, custom AWS CloudWatch metrics can be very expensive. If updated or queried regularly, each each custom AWS CloudWatch metric may cost up to $3.60 per metric per year with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill. This high cost prevents using metrics liberally in your app at scale.
+AWS CloudWatch offers metrics to monitor AWS services and your apps. Unfortunately, custom AWS CloudWatch metrics can be very expensive. If updated or queried regularly, each custom AWS CloudWatch metric can cost up to $3.60 per metric per year, with additional costs for querying. If you have many metrics or high dimensionality on your metrics, this can lead to a very large CloudWatch Metrics bill. This high cost prevents using metrics liberally in your app at scale.
 
-**CustomMetrics** provides lower cost metrics that are dramatically less expensive and faster than standard AWS CloudWatch metrics.  
+**CustomMetrics** provides lower-cost metrics that are dramatically less expensive and faster than standard AWS CloudWatch metrics.  
  
-> CustomMetrics is up to 1000x times less expensive per metric than CloudWatch. 
+> CustomMetrics is up to 1000x less expensive per metric than CloudWatch. 
 
-CustomMetrics achieves these savings by supporting **latest** period metrics. i.e. last day, last month, last hour, last 5 minutes etc. This enables each metric to be saved in a single DynamoDB item, and can be stored and queried fast, with minimal cost.
+CustomMetrics achieves these savings by storing metrics in a single DynamoDB item, which can be stored and queried quickly with minimal cost.
 
-CustomMetrics stores metrics to a DynamoDB table of your choosing that can coexist with existing application data.
+This enables whole new use cases for metrics in your apps. You can create metrics liberally for each customer, product, feature, etc., without worrying about the cost. Previously, you had to carefully choose your metrics and only measure critical metrics. With CustomMetrics, you can measure everything. Each metric consumes only a single, small DynamoDB write when persisted and a single read when queried.
+
+CustomMetrics stores metrics in a DynamoDB table of your choosing, which can coexist with existing application data. Use it from EC2, Containers, or Lambdas.
 
 ![Dashboard](./doc/dashboard.avif)
 
 ## CustomMetrics Features
 
--   Simple one line API to emit metrics from any NodeJS TypeScript or JavaScript app.
--   Similar metric model to AWS CloudWatch metrics supporting namespaces, metrics, dimensions, statistics and intervals.
--   Computes statistics for: average, min, max, count and sum.
--   Computes P value statistics with configurable P value resolution.
--   Supports default metric intervals of: last 5 mins, hour, day, week, month and year.
--   Supports querying from arbitrary start dates for most recent period.
--   Configurable custom intervals for higher or different metric intervals.
+-   Simple one-line API to emit metrics from any NodeJS TypeScript or JavaScript app.
+-   Similar metric model to AWS CloudWatch metrics supporting namespaces, metrics, dimensions, statistics, and intervals.
+-   Computes statistics for average, min, max, count, and sum.
+-   Computes P-value statistics with configurable P-value resolution.
+-   Supports default metric intervals of last 5 mins, hour, day, week, month, and year.
+-   Supports querying from arbitrary start dates and arbitrary periods.
+-   Configurable custom metric intervals for more granular or different metric intervals.
 -   Fast and flexible metric query API.
 -   Query API can return data points or aggregate metric data to a single statistic.
--   Scalable and supports many simultaneous clients emitting metrics.
+-   Highly scalable and supports many simultaneous clients emitting metrics.
 -   Stores data in any existing DynamoDB table and coexists with existing app data.
 -   Supports multiple services, apps, namespaces and metrics in a single DynamoDB table.
+-   Supports buffered metrics to emit almost zero-latency metrics.
 -   Extremely fast initialization time.
 -   Written in TypeScript with full TypeScript support.
--   Clean, readable, small, TypeScript code base (~1.4K lines).
+-   Clean, readable, small, TypeScript code base (~1.6K lines).
 -   No external dependencies.
--   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single table metrics. [EmbedThis Ioto](https://www.embedthis.com/) uses CustomMetrics for IoT metrics.
+-   [DynamoDB Onetable](https://www.npmjs.com/package/dynamodb-onetable) uses CustomMetrics for detailed single-table metrics. [EmbedThis Ioto](https://www.embedthis.com/) uses CustomMetrics for IoT metrics.
 
 ![Custom Metrics](./doc/dashboard-dark.avif)
 
@@ -63,7 +66,7 @@ Import the CustomMetrics library. If you are not using ES modules or TypeScript,
 import {CustomMetrics} from 'CustomMetrics'
 ```
 
-Next create and configure the CustomMetrics instance by nominating the DynamoDB table and key structure to hold your metrics. 
+Next, create and configure the CustomMetrics instance by nominating the DynamoDB table and key structure to hold your metrics. 
 
 ```javascript
 const metrics = new CustomMetrics({
@@ -74,11 +77,11 @@ const metrics = new CustomMetrics({
 })
 ```
 
-Metrics are stored in the DynamoDB database referenced by the **table** name in the desired region. This table can be your existing application DynamoDB table and metrics can safely coexist with your data.
+Metrics are stored in the DynamoDB table referenced by the **table** name in the desired region. This table can be your existing application DynamoDB table, and metrics can safely coexist with your data.
 
 The **primaryKey** and **sortKey** are the primary and sort keys for the main table index. These default to 'pk' and 'sk' respectively. CustomMetrics does not support tables without a sort key.
 
-If you have an existing AWS SDK V3 DynamoDB client instance, you can use that with the CustomMetrics constructor. This will have slightly faster initialization time than simply providing the table name.
+If you have an existing AWS SDK v3 DynamoDB client instance, you can use that with the CustomMetrics constructor. This will result in a slightly faster initialization time than simply providing the table name.
 
 ```javascript
 import {DynamoDBClient} from '@aws-sdk/client-dynamodb'
@@ -105,7 +108,7 @@ await metrics.emit('Acme/Metrics', 'launches', 10)
 
 This will emit the `launches` metric in the `Acme/Metrics` namespace with the value of **10**. 
 
-A metric can have dimensions that are unique metric values for specific instances. For example, we may want to count the number of launches for a specific rocket.
+A metric can have dimensions, which are unique metric values for specific instances. For example, we may want to count the number of launches for a specific rocket.
 
 ```javascript
 await metrics.emit('Acme/Metrics', 'launches', 10, [
@@ -113,7 +116,7 @@ await metrics.emit('Acme/Metrics', 'launches', 10, [
 ])
 ```
 
-The metric will be emitted for each dimension provided. A dimension may have one or more properties. A metric can also be emitted for multiple dimensions. 
+The metric is emitted for each dimension provided. A dimension can have one or more properties, and a metric can be emitted for multiple dimensions. 
 
 If you want to emit a metric over all dimensions, you can add {}. For example:
 
@@ -128,7 +131,7 @@ await metrics.emit('Acme/Metrics', 'launches', 10, [
 ])
 ```
 
-This will emit a metric that is a total of all launches for all rocket types.
+This emits a metric that is a total of all launches for all rocket types.
 
 ## Query Metrics
 
@@ -140,7 +143,7 @@ let results = await metrics.query('Acme/Metrics', 'speed', {
 }, 86400, 'max')
 ```
 
-This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds). Intervals that have no data will have points set to {count: 0, value: 0, timestamp}. Use {} for the all-dimensions value.
+This will retrieve the `speed` metric from the `Acme/Metrics` namespace for the `{rocket == 'saturnV'}` dimension. The data points returned will be the maximum speed measured over the day's launches (86400 seconds). Intervals with no data will have points set to `{count: 0, value: 0, timestamp}`. Use `{}` for the all-dimensions value.
 
 This will return data like this:
 
@@ -161,7 +164,7 @@ This will return data like this:
 }
 ```
 
-If you want to query the results as a single value over the entire period (instead of as a set of data points), set the `accumulate` options to true.
+If you want to query the results as a single value over the entire period (instead of as a set of data points), set the `accumulate` option to true.
 
 ```javascript
 let results = await metrics.query('Acme/Metrics', 'speed', {
@@ -179,8 +182,7 @@ let results = await metrics.query('Acme/Metrics', 'speed', {
 }, 28 * 86400, 'max', {accumulate: true, start: new Date(2000, 0, 1).getTime()})
 ```
 
-To query multiple metrics, use the `queryMetrics` method. This will query all dimensions for a metric and 
-return a list of metric results for all dimensions. Note: this will not flush buffered metric values before computing the results.
+To query multiple metrics, use the `queryMetrics` method. This method queries all dimensions for a metric and returns a list of metric results for all dimensions. Note: this will not flush buffered metric values before computing the results.
 
 ```javascript
 let results = await metrics.queryMetrics('Acme/Metrics', 'speed', 86400, 'avg')
@@ -213,9 +215,9 @@ This will also return a list of dimensions in **list.dimensions**.
 
 ## Metrics Scoping
 
-You can scope metrics by chosing unique namespaces for different applications or services, or by using various dimensions for applications/services. This is the preferred design pattern.
+You can scope metrics by choosing unique namespaces for different applications or services, or by using various dimensions for applications/services. This is the preferred design pattern.
 
-You can also scope metrics by selecting a unique `owner` property via the CustomMetrics constructor. This property is used, in the primary key of metric items. This owner defaults to **'default'**.
+You can also scope metrics by selecting a unique `owner` property via the CustomMetrics constructor. This property is used in the primary key of metric items. This owner defaults to **'default'**.
 
 ```javascript
 const cartMetrics = new CustomMetrics({
@@ -228,7 +230,7 @@ const cartMetrics = new CustomMetrics({
 
 ## Limitations
 
-If you are updating metrics extremely frequently, CustomMetrics can impose a meaningful DynamoDB write load as each metric update will result in one database write. If you have very high frequency metric updates, consider using [Metric Buffering](#buffering) to buffer and coalesce metric updates.
+If you are updating metrics very frequently, CustomMetrics can impose a significant DynamoDB write load, as each metric update results in one database write. If you have very high frequency metric updates, consider using [Metric Buffering](#buffering) to buffer and coalesce metric updates.
 
 ### CustomMetrics Class API
 
@@ -285,7 +287,7 @@ const metrics = new CustomMetrics({
 })
 ```
 
-CustomMetric spans define how each metric is processed and aged. The spans are an ordered list of metric interval periods. 
+CustomMetrics spans define how each metric is processed and aged. The spans are an ordered list of metric interval periods. 
 
 The default spans will store statistics for the periods: 5 minutes, 1 hour, 1 day, 1 week, 1 month and 1 year. 
 
@@ -304,7 +306,7 @@ const DefaultSpans: SpanDef[] = [
 ]
 ```
 
-The span `period` property is the number of seconds in that span. The `samples` property specifies the number of data points to be captured. If you call emit() more frequently than the `period/samples` interval, CustomMetrics will agregate the extra values into the relevant span point value.
+The span `period` property is the number of seconds in that span. The `samples` property specifies the number of data points to be captured. If you call `emit()` more frequently than the `period/samples` interval, CustomMetrics will aggregate the extra values into the relevant span point value.
 
 Here is an example of a higher resolution set of spans that keep metric values for 1 minute, 5 minutes, 1 hour and 1 day.
 
@@ -324,11 +326,11 @@ const metrics = new CustomMetrics({
 
 If you want to change your spans in the future, you can upgrade your metric data with new spans. To do this, you can use the `upgrade` method. This will apportion data points from the old spans to the new spans based on the point's timestamp. The **upgrade** call takes the namespace, metric name and specific dimensions to upgrade. 
 
-You can also upgrade metrics by providing an **upgrade: true** parameter to the emit calls.
+You can also upgrade metrics by providing an `upgrade: true` parameter to the `emit` calls.
 
-If you define new spans via the constructor and do not call upgrade, your new metrics will use the new spans and the old metrics will utilize the old spans. Query will still work, and CustomMetrics will return metrics according to the spans in use when the metric was first created. 
+If you define new spans via the constructor and do not call `upgrade`, your new metrics will use the new spans, and the old metrics will utilize the old spans. Query will still work, and CustomMetrics will return metrics according to the spans in use when the metric was first created. 
 
-The **upgrade** API and emit **upgrade** option are idempotent in that there is no ill effects from upgrading a metric that is already upgraded. The emit call will only upgrade if an upgrade is required.
+The `upgrade` API and `emit` `upgrade` option are idempotent, meaning there are no ill effects from upgrading a metric that is already upgraded. The emit call will only upgrade if an upgrade is required.
 
 If you do use custom span definitions, ensure you supply the custom span definition to all your constructor calls going forward. Otherwise, the default spans will be used for any new metrics.
 
@@ -379,9 +381,9 @@ await metrics.flush()
 await CustomMetrics.flushAll()
 ```
 
-If you configure a Lambda layer (any layer will do), CustomMetrics will save buffered metrics upon Lambda instance termination. Unfortunately, Lambda will only send a termination signal to lambdas that utilize a Lambda layer.
+If you configure a Lambda layer (any layer will do), CustomMetrics will save buffered metrics upon Lambda instance termination. Unfortunately, Lambda only sends a termination signal to lambdas that utilize a Lambda layer.
 
-Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by the emit option.buffer parameter) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until the next request or when AWS terminates the Lambda -- whereupon the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
+Buffered metrics may be less accurate than non-buffered metrics. Metrics may be retained in-memory for a period of time (as specified by the emit option.buffer parameter) before being flushed to DynamoDB. If a Lambda instance is not required to service a request, any buffered metrics will remain in-memory until the next request or until AWS terminates the Lambda, at which point the buffered values will be saved. This may mean a temporary loss of accuracy to querying entities.
 
 Furthermore, if you have a very large number of metrics in one Lambda instance, it is possible that the Lambda instance may not be able to save all buffered metrics during Lambda termination. This can be somewhat mitigated by using shorter buffering criteria.
 
@@ -408,7 +410,7 @@ async emit(namespace: string,
     }): Promise<Metric>
 ```
 
-This call will emit metrics for each of the specified dimensions using the supplied namespace and metric name. These will be combined with the CustomMetrics owner supplied via the constructor to scope the metric. 
+This call will emit metrics for each of the specified dimensions using the supplied namespace and metric name. These will be combined with the CustomMetrics `owner` supplied via the constructor to scope the metric. 
 
 For example:
 
@@ -444,7 +446,7 @@ async query(namespace: string,
 
 This will retrieve a metric value for a given namespace, metric name and set of dimensions.
 
-The `period` argument selects the best metric span to query. For example: 3600 for one hour. The period will be used by query to find the span that has the same or closest (and greater) period.
+The `period` argument selects the best metric span to query (e.g., 3600 for one hour). The `query` will use the period to find the span with the same or closest (and greater) period.
 
 The `statistic` can be `avg`, `current`, `max`, `min`, `sum`, `count` or a P-value of the form `pNN` where NN is the P-value. 
 
@@ -452,7 +454,7 @@ The returned data will contain the `namespace`, `metric`, `dimensions` and data 
 
 The `avg`, `max` and `min` statistics compute the average, maximum and minimum value for each span data point. The `current` statistic uses the most recent value for each span data point and is useful when used with the `accumulate` option to return the most recent value of a metric.
 
-The `sum` statistic returns the summation of the values for each span data point and the `count` statistic returns the number of values for a span data point. 
+The `sum` statistic returns the summation of the values for each span data point, and the `count` statistic returns the number of values for a span data point. 
 
 For a P-value metric example: p95 would return the P-95 value. To get meaningful P-value statistics you must set the CustomMetrics pResolution parameter to the number of data points to keep for computing P-values. By default this resolution is zero, which means P-values are not computed. To enable, you should set this to at least 100.
 
@@ -552,7 +554,7 @@ Here is what a metric item looks like:
 }
 ```
 
-Data from shorter spans are propagated lazily to longer spans when the span points become full. This is done during emit and flush only. Queries will flush buffered metrics for the matching query to disk. Queries will propagate earlier span data points in-memory and will not otherwise update the on-disk representation.
+Data from shorter spans is propagated lazily to longer spans when the span points become full. This is done only during `emit` and `flush`. Queries will flush buffered metrics for the matching query to disk. Queries propagate earlier span data points in memory and will not otherwise update the on-disk representation.
 
 The span.end marks the time of the end of the point bucket and is updated whenever a new data point is added to the span. Spans may have zero or more data points. The span.end values for the various spans are not ordered, correlated or coordinated between spans. 
 
