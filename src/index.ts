@@ -1049,10 +1049,8 @@ export class CustomMetrics {
         let points = span.points || []
         let start = span.end - points.length * interval
         let when = point.timestamp || timestamp
-        /*
-            Pad points and determine the right index for the point to be inserted
-         */
-        let index: number
+        let index: number = -1
+
         if (points.length == 0) {
             if (point.count) {
                 points.push({count: 0, sum: 0})
@@ -1073,19 +1071,22 @@ export class CustomMetrics {
                 start -= interval
             }
             /*
-                Fill to the point.timestamp or timestamp
-             */
+                Add filler points
+            */
             while (when >= span.end && points.length < span.samples) {
                 points.push({count: 0, sum: 0})
                 span.end += interval
             }
             index = Math.floor((when - start) / interval)
+            this.assert(when < span.end)
+            this.assert(index < span.samples)
         }
         if (points.length > span.samples) {
             /* Should never happen */
+            this.assert(points.length <= span.samples)
             points = points.slice(-span.samples)
         }
-        this.assert(0 <= index && index < points.length)
+        this.assert(-1 <= index && index < points.length)
         return index
     }
 
@@ -1415,51 +1416,6 @@ export class CustomMetrics {
         return result
     }
 
-    formatDate(n: number) {
-        function padTo2Digits(num: number) {
-            return num.toString().padStart(2, '0')
-        }
-        let date = new Date(n)
-        const year = date.getFullYear().toString().slice(-2) // Get last two digits of the year
-        const month = padTo2Digits(date.getMonth() + 1) // Months are zero-indexed
-        const day = padTo2Digits(date.getDate())
-        const hours = padTo2Digits(date.getHours())
-        const minutes = padTo2Digits(date.getMinutes())
-        const seconds = padTo2Digits(date.getSeconds())
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-    }
-    
-    metricToString(metric: Metric): string {
-        let buf: string[] = []
-        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions) || ''}`)
-        for (let span of metric.spans) {
-            let interval = span.period / span.samples
-            let start = span.end - span.points.length * interval
-            buf.push(
-                ` ${span.period} secs ${this.formatDate(start * 1000)} => ` + 
-                `${this.formatDate(span.end * 1000)} ${span.points.length} points`
-            )
-            for (let point of span.points) {
-                buf.push(`     count ${point.count} = sum ${point.sum}`)
-            }
-        }
-        return buf.join('\n')
-    }
-    
-    queryToString(metric: MetricQueryResult): string {
-        let points = metric.points.slice(0)
-        let buf: string[] = []
-        buf.push(
-            `${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${
-                points.length
-            } points`
-        )
-        for (let point of points) {
-            buf.push(`     ${this.formatDate(point.timestamp || 0)} = ${point.value || '-'} / ${point.count}`)
-        }
-        return buf.join('\n')
-    }
-
     static freeInstanceByKey(key: string) {
         delete Instances[key]
     }
@@ -1529,6 +1485,51 @@ export class CustomMetrics {
         return new Promise(function (resolve, reject) {
             setTimeout(() => resolve(true), time)
         })
+    }
+
+    formatDate(n: number) {
+        function padTo2Digits(num: number) {
+            return num.toString().padStart(2, '0')
+        }
+        let date = new Date(n)
+        const year = date.getUTCFullYear().toString().slice(-2) // Get last two digits of the year
+        const month = padTo2Digits(date.getUTCMonth() + 1) // Months are zero-indexed
+        const day = padTo2Digits(date.getUTCDate())
+        const hours = padTo2Digits(date.getUTCHours())
+        const minutes = padTo2Digits(date.getUTCMinutes())
+        const seconds = padTo2Digits(date.getUTCSeconds())
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    }
+    
+    metricToString(metric: Metric): string {
+        let buf: string[] = []
+        buf.push(`${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions) || ''}`)
+        for (let span of metric.spans) {
+            let interval = span.period / span.samples
+            let start = span.end - span.points.length * interval
+            buf.push(
+                ` ${span.period} secs ${this.formatDate(start * 1000)} => ` + 
+                `${this.formatDate(span.end * 1000)} ${span.points.length} points`
+            )
+            for (let point of span.points) {
+                buf.push(`     count ${point.count} = sum ${point.sum}`)
+            }
+        }
+        return buf.join('\n')
+    }
+    
+    queryToString(metric: MetricQueryResult): string {
+        let points = metric.points.slice(0)
+        let buf: string[] = []
+        buf.push(
+            `${metric.namespace}/${metric.metric}/${JSON.stringify(metric.dimensions)} ${metric.period} ${
+                points.length
+            } points`
+        )
+        for (let point of points) {
+            buf.push(`     ${this.formatDate(point.timestamp || 0)} = ${point.value || '-'} / ${point.count}`)
+        }
+        return buf.join('\n')
     }
 }
 
