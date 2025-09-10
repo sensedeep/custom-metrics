@@ -562,17 +562,16 @@ export class CustomMetrics {
         Flush metrics for all instances on Lambda termination
      */
     static async terminate() {
+        console.log(`CustomMetrics: Flushing metrics on termination`)
         await CustomMetrics.flushAll()
     }
 
     static async flushAll() {
-        console.log(`CustomMetrics: Flushing metrics started`)
         for (let [key, instance] of Object.entries(Instances)) {
             await instance.flush()
             CustomMetrics.freeInstanceByKey(key)
         }
         Instances = {}
-        console.log(`CustomMetrics: Flushing metrics complete`)
     }
 
     async flush(options: MetricQueryOptions = {}) {
