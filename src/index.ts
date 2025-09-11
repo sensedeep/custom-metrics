@@ -562,7 +562,7 @@ export class CustomMetrics {
         Flush metrics for all instances on Lambda termination
      */
     static async terminate() {
-        console.log(`CustomMetrics: Flushing metrics on termination`)
+        console.log(`CustomMetrics: Flushing metrics on exit`)
         await CustomMetrics.flushAll()
     }
 
